@@ -1,10 +1,10 @@
 from enum import Enum
 import time
 import inspect
+import traceback
 from typing import Optional, List, Dict, Any
-from opentelemetry.sdk._logs import LoggerProvider
-from opentelemetry.sdk._logs.export import BatchLogProcessor
-from opentelemetry._logs import Logger as OTELLogger
+from opentelemetry.sdk._logs import LoggerProvider, LogRecord, SeverityNumber
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.semconv.resource import ResourceAttributes
@@ -19,7 +19,7 @@ class LogLevel(str, Enum):
 
 class LoggerOptions:
     def __init__(self):
-        self.otel_logger: Optional[OTELLogger] = None
+        self.provider: Optional[LoggerProvider] = None
         self.name: str = ""
         self.attributes: List[Dict[str, Any]] = []
         self.url: str = ""
@@ -30,7 +30,7 @@ class LoggerOptions:
 
 class Logger:
     def __init__(self, options: LoggerOptions):
-        self.otel_logger = self._get_otel_logger(options)
+        self.provider = self._get_logger_provider(options)
         self.attributes = options.attributes
         self.passthrough = options.passthrough
 
@@ -62,17 +62,19 @@ class Logger:
         if self.passthrough:
             print(message)
 
-    def _log(self, level: LogLevel, message: str, error: Optional[Exception], attrs: Dict[str, Any]):
-        self.otel_logger.emit(
-            severity=self._get_severity(level),
-            body=message,
-            attributes=attrs,
-            timestamp=int(time.time() * 1e9)  # nanoseconds
-        )
-
     @staticmethod
     def _get_severity(level: LogLevel) -> str:
         return level.value
+
+    @staticmethod
+    def _get_severity_number(level: LogLevel) -> SeverityNumber:
+        severity_map = {
+            LogLevel.DEBUG: SeverityNumber.DEBUG,
+            LogLevel.INFO: SeverityNumber.INFO,
+            LogLevel.WARN: SeverityNumber.WARN,
+            LogLevel.ERROR: SeverityNumber.ERROR,
+        }
+        return severity_map.get(level, SeverityNumber.INFO)
 
     @staticmethod
     def _get_caller_attrs() -> Dict[str, Any]:
@@ -84,9 +86,9 @@ class Logger:
             'caller.function': caller.f_code.co_name
         }
 
-    def _get_otel_logger(self, options: LoggerOptions) -> OTELLogger:
-        if options.otel_logger:
-            return options.otel_logger
+    def _get_logger_provider(self, options: LoggerOptions) -> LoggerProvider:
+        if options.provider:
+            return options.provider
 
         name = options.name or "example"
         url = options.url or "log.vigilant.run:4317"
@@ -104,10 +106,33 @@ class Logger:
 
         provider = LoggerProvider(
             resource=resource,
-            processors=[BatchLogProcessor(exporter)]
+            processors=[BatchLogRecordProcessor(exporter)]
         )
 
-        return provider.get_logger(name)
+        return provider
+
+    def _log(self, level: LogLevel, message: str, error: Optional[Exception], attrs: Dict[str, Any]):
+        attributes = attrs.copy()
+        if error:
+            attributes.update({
+                'error.type': error.__class__.__name__,
+                'error.message': str(error),
+                'error.stack': getattr(error, '__traceback__', None) and ''.join(traceback.format_tb(error.__traceback__))
+            })
+
+        record = LogRecord(
+            timestamp=int(time.time() * 1e9),
+            trace_id=None,
+            span_id=None,
+            trace_flags=None,
+            severity_text=self._get_severity(level),
+            severity_number=self._get_severity_number(level),
+            body=message,
+            attributes=attributes,
+            resource=None,
+        )
+
+        self.provider.emit(record)
 
 
 def create_logger(**kwargs) -> Logger:
