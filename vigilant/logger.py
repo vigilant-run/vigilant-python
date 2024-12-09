@@ -3,11 +3,13 @@ import time
 import inspect
 import traceback
 from typing import Optional, List, Dict, Any
-from opentelemetry.sdk._logs import LoggerProvider, LogRecord, SeverityNumber
+from opentelemetry.sdk._logs import LoggerProvider, LogRecord
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.semconv.resource import ResourceAttributes
+from opentelemetry._logs import SeverityNumber
+from opentelemetry._logs import Logger as OTELLogger
 
 
 class LogLevel(str, Enum):
@@ -20,6 +22,7 @@ class LogLevel(str, Enum):
 class LoggerOptions:
     def __init__(self):
         self.provider: Optional[LoggerProvider] = None
+        self.otel_logger: Optional[OTELLogger] = None
         self.name: str = ""
         self.attributes: List[Dict[str, Any]] = []
         self.url: str = ""
@@ -31,6 +34,7 @@ class LoggerOptions:
 class Logger:
     def __init__(self, options: LoggerOptions):
         self.provider = self._get_logger_provider(options)
+        self.otel_logger = self.provider.get_logger(options.name)
         self.attributes = options.attributes
         self.passthrough = options.passthrough
 
@@ -104,10 +108,8 @@ class Logger:
             ResourceAttributes.SERVICE_NAME: name
         })
 
-        provider = LoggerProvider(
-            resource=resource,
-            processors=[BatchLogRecordProcessor(exporter)]
-        )
+        provider = LoggerProvider(resource=resource)
+        provider.add_log_record_processor(BatchLogRecordProcessor(exporter))
 
         return provider
 
@@ -122,17 +124,16 @@ class Logger:
 
         record = LogRecord(
             timestamp=int(time.time() * 1e9),
-            trace_id=None,
-            span_id=None,
-            trace_flags=None,
             severity_text=self._get_severity(level),
             severity_number=self._get_severity_number(level),
             body=message,
             attributes=attributes,
-            resource=None,
+            trace_id=0,
+            span_id=0,
+            trace_flags=0,
         )
 
-        self.provider.emit(record)
+        self.otel_logger.emit(record)
 
 
 def create_logger(**kwargs) -> Logger:
