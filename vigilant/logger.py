@@ -20,43 +20,86 @@ class LogLevel(str, Enum):
 
 
 class LoggerOptions:
+    """Configuration options for the Logger.
+
+    Attributes:
+        name (str): Name of the service you are logging from. Used as service.name in logs.
+        url (str): The URL of the logging endpoint (e.g., 'log.vigilant.run:4317')
+        token (str): Authentication token for the logging service
+        passthrough (bool): Whether to also print logs to stdout
+        insecure (bool): Whether to use insecure connection for gRPC
+        attributes (List[Dict[str, Any]]): Additional attributes to include with all logs
+        otel_provider (Optional[LoggerProvider]): Optional custom LoggerProvider instance
+        otel_logger (Optional[OTELLogger]): Optional custom Logger instance
+    """
+
     def __init__(self):
-        self.provider: Optional[LoggerProvider] = None
+        self.otel_provider: Optional[LoggerProvider] = None
         self.otel_logger: Optional[OTELLogger] = None
-        self.name: str = ""
+        self.name: str = "service"
         self.attributes: List[Dict[str, Any]] = []
-        self.url: str = ""
-        self.token: str = ""
-        self.passthrough: bool = False
+        self.url: str = "log.vigilant.run:4317"
+        self.token: str = "tk_1234567890"
+        self.passthrough: bool = True
+        self.disabled: bool = False
         self.insecure: bool = False
 
 
 class Logger:
     def __init__(self, options: LoggerOptions):
-        self.provider = self._get_logger_provider(options)
-        self.otel_logger = self.provider.get_logger(options.name)
+        self.otel_provider = self._get_logger_provider(options)
+        self.otel_logger = self.otel_provider.get_logger(options.name)
         self.attributes = options.attributes
         self.passthrough = options.passthrough
 
-    def debug(self, message: str, **attrs):
+    def debug(self, message: str, attrs: Dict[str, Any] = {}):
+        """
+        Log a debug message
+
+        Args:
+            message: The message to log
+            attrs: Additional attributes to include with the log
+        """
         caller_attrs = self._get_caller_attrs()
         self._log(LogLevel.DEBUG, message, None, {**attrs, **caller_attrs})
         if self.passthrough:
             print(message)
 
-    def info(self, message: str, **attrs):
+    def info(self, message: str, attrs: Dict[str, Any] = {}):
+        """
+        Log an info message
+
+        Args:
+            message: The message to log
+            attrs: Additional attributes to include with the log
+        """
         caller_attrs = self._get_caller_attrs()
         self._log(LogLevel.INFO, message, None, {**attrs, **caller_attrs})
         if self.passthrough:
             print(message)
 
-    def warn(self, message: str, **attrs):
+    def warn(self, message: str, attrs: Dict[str, Any] = {}):
+        """
+        Log a warning message
+
+        Args:
+            message: The message to log
+            attrs: Additional attributes to include with the log
+        """
         caller_attrs = self._get_caller_attrs()
         self._log(LogLevel.WARN, message, None, {**attrs, **caller_attrs})
         if self.passthrough:
             print(message)
 
-    def error(self, message: str, error: Optional[Exception] = None, **attrs):
+    def error(self, message: str, attrs: Dict[str, Any] = {}, error: Optional[Exception] = None):
+        """
+        Log an error message
+
+        Args:
+            message: The message to log
+            attrs: Additional attributes to include with the log
+            error: An optional exception to include with the log
+        """
         caller_attrs = self._get_caller_attrs()
         attrs_with_error = attrs
         if error:
@@ -83,20 +126,25 @@ class Logger:
     @staticmethod
     def _get_caller_attrs() -> Dict[str, Any]:
         frame = inspect.currentframe()
-        caller = frame.f_back.f_back
-        return {
-            'caller.file': caller.f_code.co_filename,
-            'caller.line': caller.f_lineno,
-            'caller.function': caller.f_code.co_name
-        }
+        try:
+            caller = frame.f_back.f_back
+            if caller is None:
+                return {}
+            return {
+                'caller.file': caller.f_code.co_filename,
+                'caller.line': caller.f_lineno,
+                'caller.function': caller.f_code.co_name
+            }
+        finally:
+            del frame
 
     def _get_logger_provider(self, options: LoggerOptions) -> LoggerProvider:
-        if options.provider:
-            return options.provider
+        if options.otel_provider:
+            return options.otel_provider
 
-        name = options.name or "example"
-        url = options.url or "log.vigilant.run:4317"
-        token = options.token or "tk_1234567890"
+        name = options.name
+        url = options.url
+        token = options.token
 
         exporter = OTLPLogExporter(
             endpoint=url,
@@ -128,6 +176,7 @@ class Logger:
             severity_number=self._get_severity_number(level),
             body=message,
             attributes=attributes,
+            resource=self.otel_provider.resource,
             trace_id=0,
             span_id=0,
             trace_flags=0,
@@ -136,12 +185,92 @@ class Logger:
         self.otel_logger.emit(record)
 
 
-def create_logger(**kwargs) -> Logger:
+def create_logger(
+    *,
+    url: str,
+    token: str,
+    name: str,
+    passthrough: bool = True,
+    insecure: bool = False,
+    attributes: List[Dict[str, Any]] = None,
+) -> Logger:
+    """Create a new Logger instance for sending logs to Vigilant.
+
+    Args:
+        url (str): The URL of the logging endpoint (e.g., 'log.vigilant.run:4317')
+        token (str): Authentication token for the logging service
+        name (str): Name of the service you are logging from. Used as service.name in logs.
+        passthrough (bool, optional): Whether to also print logs to stdout. Defaults to True.
+        insecure (bool, optional): Whether to use insecure gRPC connection. Defaults to False.
+        noop (bool, optional): Whether to disable logging. Defaults to False.
+        attributes (List[Dict[str, Any]], optional): Additional attributes to include with all logs. Defaults to None.
+
+    Returns:
+        Logger: A configured logger instance ready to send logs to Vigilant
+
+    Example:
+        >>> logger = create_logger(
+        ...     url="log.vigilant.run:4317",
+        ...     token="your_token",
+        ...     name="my-service"
+        ... )
+        >>> logger.info("Hello, world!")
+    """
     options = LoggerOptions()
-    options.name = kwargs.get('name', '')
-    options.url = kwargs.get('url', '')
-    options.token = kwargs.get('token', '')
-    options.passthrough = kwargs.get('passthrough', False)
-    options.insecure = kwargs.get('insecure', False)
-    options.attributes = kwargs.get('attributes', [])
+    options.name = name
+    options.url = url
+    options.token = token
+    options.passthrough = passthrough
+    options.insecure = insecure
+    options.attributes = attributes or []
     return Logger(options)
+
+
+class NoopLogger:
+    def __init__(self):
+        pass
+
+    def debug(self, message: str, attrs: Dict[str, Any] = {}):
+        """
+        Log a debug message
+
+        Args:
+            message: The message to log
+            attrs: Additional attributes to include with the log
+        """
+        print(message, attrs)
+
+    def info(self, message: str, attrs: Dict[str, Any] = {}):
+        """
+        Log an info message
+
+        Args:
+            message: The message to log
+            attrs: Additional attributes to include with the log
+        """
+        print(message, attrs)
+
+    def warn(self, message: str, attrs: Dict[str, Any] = {}):
+        """
+        Log a warning message
+
+        Args:
+            message: The message to log
+            attrs: Additional attributes to include with the log
+        """
+        print(message, attrs)
+
+    def error(self, message: str, attrs: Dict[str, Any] = {}, error: Optional[Exception] = None):
+        """
+        Log an error message
+
+        Args:
+            message: The message to log
+            attrs: Additional attributes to include with the log
+            error: An optional exception to include with the log
+        """
+        print(message, attrs, error)
+
+
+def create_noop_logger() -> NoopLogger:
+    return NoopLogger()
