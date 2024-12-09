@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-VERSION = "0.0.13"
+VERSION = "1.0.0"
 
 setup(
     name="vigilant-py",
