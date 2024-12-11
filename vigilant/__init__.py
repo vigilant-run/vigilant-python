@@ -1,3 +1,5 @@
-from .logger import Logger, create_logger, create_noop_logger
+from .logger import Logger, create_logger
+from .autocapture import AutocaptureLogger, create_autocapture_logger
 
-__all__ = ['create_logger', 'Logger', 'NoopLogger', 'create_noop_logger']
+__all__ = ['Logger', 'create_logger',
+           'AutocaptureLogger', 'create_autocapture_logger']

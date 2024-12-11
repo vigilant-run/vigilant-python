@@ -41,7 +41,7 @@ class LoggerOptions:
         self.url: str = "log.vigilant.run:4317"
         self.token: str = "tk_1234567890"
         self.passthrough: bool = True
-        self.disabled: bool = False
+        self.noop: bool = False
         self.insecure: bool = False
 
 
@@ -49,6 +49,7 @@ class Logger:
     def __init__(self, options: LoggerOptions):
         self.otel_provider = self._get_logger_provider(options)
         self.otel_logger = self.otel_provider.get_logger(options.name)
+        self.name = options.name
         self.attributes = options.attributes
         self.passthrough = options.passthrough
 
@@ -62,8 +63,7 @@ class Logger:
         """
         caller_attrs = self._get_caller_attrs()
         self._log(LogLevel.DEBUG, message, None, {**attrs, **caller_attrs})
-        if self.passthrough:
-            print(message)
+        self._passthrough(message)
 
     def info(self, message: str, attrs: Dict[str, Any] = {}):
         """
@@ -75,8 +75,7 @@ class Logger:
         """
         caller_attrs = self._get_caller_attrs()
         self._log(LogLevel.INFO, message, None, {**attrs, **caller_attrs})
-        if self.passthrough:
-            print(message)
+        self._passthrough(message)
 
     def warn(self, message: str, attrs: Dict[str, Any] = {}):
         """
@@ -88,8 +87,7 @@ class Logger:
         """
         caller_attrs = self._get_caller_attrs()
         self._log(LogLevel.WARN, message, None, {**attrs, **caller_attrs})
-        if self.passthrough:
-            print(message)
+        self._passthrough(message)
 
     def error(self, message: str, attrs: Dict[str, Any] = {}, error: Optional[Exception] = None):
         """
@@ -106,6 +104,15 @@ class Logger:
             attrs_with_error['error'] = str(error)
         self._log(LogLevel.ERROR, message, error, {
                   **attrs_with_error, **caller_attrs})
+        self._passthrough(message)
+
+    def shutdown(self):
+        """
+        Shutdown the logger and flush any remaining logs
+        """
+        self.otel_provider.shutdown()
+
+    def _passthrough(self, message: str):
         if self.passthrough:
             print(message)
 
@@ -152,16 +159,15 @@ class Logger:
             insecure=options.insecure
         )
 
-        resource = Resource.create({
-            ResourceAttributes.SERVICE_NAME: name
-        })
-
-        provider = LoggerProvider(resource=resource)
+        provider = LoggerProvider()
         provider.add_log_record_processor(BatchLogRecordProcessor(exporter))
 
         return provider
 
     def _log(self, level: LogLevel, message: str, error: Optional[Exception], attrs: Dict[str, Any]):
+        if self.noop:
+            return
+
         attributes = attrs.copy()
         if error:
             attributes.update({
@@ -170,13 +176,17 @@ class Logger:
                 'error.stack': getattr(error, '__traceback__', None) and ''.join(traceback.format_tb(error.__traceback__))
             })
 
+        resource = Resource.create({
+            ResourceAttributes.SERVICE_NAME: self.name
+        })
+
         record = LogRecord(
             timestamp=int(time.time() * 1e9),
             severity_text=self._get_severity(level),
             severity_number=self._get_severity_number(level),
             body=message,
             attributes=attributes,
-            resource=self.otel_provider.resource,
+            resource=resource,
             trace_id=0,
             span_id=0,
             trace_flags=0,
@@ -192,6 +202,7 @@ def create_logger(
     name: str,
     passthrough: bool = True,
     insecure: bool = False,
+    noop: bool = False,
     attributes: List[Dict[str, Any]] = None,
 ) -> Logger:
     """Create a new Logger instance for sending logs to Vigilant.
@@ -223,54 +234,5 @@ def create_logger(
     options.passthrough = passthrough
     options.insecure = insecure
     options.attributes = attributes or []
+    options.noop = noop
     return Logger(options)
-
-
-class NoopLogger:
-    def __init__(self):
-        pass
-
-    def debug(self, message: str, attrs: Dict[str, Any] = {}):
-        """
-        Log a debug message
-
-        Args:
-            message: The message to log
-            attrs: Additional attributes to include with the log
-        """
-        print(message, attrs)
-
-    def info(self, message: str, attrs: Dict[str, Any] = {}):
-        """
-        Log an info message
-
-        Args:
-            message: The message to log
-            attrs: Additional attributes to include with the log
-        """
-        print(message, attrs)
-
-    def warn(self, message: str, attrs: Dict[str, Any] = {}):
-        """
-        Log a warning message
-
-        Args:
-            message: The message to log
-            attrs: Additional attributes to include with the log
-        """
-        print(message, attrs)
-
-    def error(self, message: str, attrs: Dict[str, Any] = {}, error: Optional[Exception] = None):
-        """
-        Log an error message
-
-        Args:
-            message: The message to log
-            attrs: Additional attributes to include with the log
-            error: An optional exception to include with the log
-        """
-        print(message, attrs, error)
-
-
-def create_noop_logger() -> NoopLogger:
-    return NoopLogger()

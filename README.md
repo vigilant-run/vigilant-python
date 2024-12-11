@@ -8,8 +8,8 @@ This is the Python SDK for the Vigilant logging platform. It is a wrapper around
 pip install vigilant-py
 ```
 
-## Usage
-
+## Usage (Standard)
+The standard logger is a wrapper around the OpenTelemetry logger. It allows you to log messages with attributes and metadata. The logs are sent to Vigilant and viewable in the dashboard.
 ```python
 from vigilant import create_logger
 
@@ -31,24 +31,38 @@ try:
     raise ValueError("Something went wrong")
 except Exception as e:
     logger.error("Operation failed", error=e)
+
+# Application shutdown
+logger.shutdown()
 ```
 
-## Log Levels
-
+## Usage (Autocapture)
+There is an additional logger that captures stdout and stderr and logs it to Vigilant. This is allow you to capture logs without using the logger. There is no metadata or attributes attached to the logs.
 ```python
-logger.debug("Debug message")
-logger.info("Info message")
-logger.warn("Warning message")
-logger.error("Error message", error=Exception("Something went wrong"))
-```
+from vigilant import create_autocapture_logger
 
-## Testing
+# Initialize the logger
+logger = create_autocapture_logger(
+    url="log.vigilant.run:4317",
+    name="my-service",
+    token="your-token",
+)
 
-If you want to test the SDK without sending logs to Vigilant, you can use the `create_noop_logger` function.
+# Enable autocapture
+logger.enable()
 
-```python
-from vigilant import create_noop_logger
+# Basic logging
+logger.info("Hello, World!")
 
-logger = create_noop_logger()
-logger.info("This message will not be sent to Vigilant, only printed to stdout")
+# Capture stdout
+print("Hello, World!")
+
+# Error logging
+try:
+    raise ValueError("Something went wrong")
+except Exception as e:
+    print("Operation failed", error=e)
+
+# Application shutdown
+logger.shutdown()
 ```
