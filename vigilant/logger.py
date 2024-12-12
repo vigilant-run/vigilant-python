@@ -110,7 +110,7 @@ class Logger:
         """
         Shutdown the logger and flush any remaining logs
         """
-        self.otel_provider.shutdown()
+        self.otel_provider.force_flush()
 
     def _passthrough(self, message: str):
         if self.passthrough:
