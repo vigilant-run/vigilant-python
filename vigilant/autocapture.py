@@ -1,5 +1,5 @@
 import sys
-from logger import Logger, LoggerOptions
+from .logger import Logger, LoggerOptions
 from typing import List, Dict, Any
 
 
@@ -8,6 +8,8 @@ class AutocaptureLogger(Logger):
         super().__init__(options)
         self.original_stdout_write = sys.stdout.write
         self.original_stderr_write = sys.stderr.write
+        self._stdout_buffer = ""
+        self._stderr_buffer = ""
 
     def enable(self):
         """
@@ -30,7 +32,6 @@ class AutocaptureLogger(Logger):
             for line in lines[:-1]:
                 self.info(line)
             self._stdout_buffer = lines[-1]
-        self._passthrough(message)
 
     def _stderr_write(self, message):
         self._stderr_buffer += message
@@ -39,11 +40,10 @@ class AutocaptureLogger(Logger):
             for line in lines[:-1]:
                 self.error(line)
             self._stderr_buffer = lines[-1]
-        self._passthrough(message)
 
     def _passthrough(self, message: str):
         if self.passthrough:
-            self.original_stdout_write(message)
+            self.original_stdout_write(message + '\n')
 
 
 def create_autocapture_logger(

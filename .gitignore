@@ -1,3 +1,4 @@
 vigilant_py.egg-info/
 dist/
 build/
+__pycache__/

@@ -1,6 +1,5 @@
 from enum import Enum
 import time
-import inspect
 import traceback
 from typing import Optional, List, Dict, Any
 from opentelemetry.sdk._logs import LoggerProvider, LogRecord
@@ -52,6 +51,7 @@ class Logger:
         self.name = options.name
         self.attributes = options.attributes
         self.passthrough = options.passthrough
+        self.noop = options.noop
 
     def debug(self, message: str, attrs: Dict[str, Any] = {}):
         """
@@ -61,7 +61,7 @@ class Logger:
             message: The message to log
             attrs: Additional attributes to include with the log
         """
-        caller_attrs = self._get_caller_attrs()
+        caller_attrs = self._get_call_stack()
         self._log(LogLevel.DEBUG, message, None, {**attrs, **caller_attrs})
         self._passthrough(message)
 
@@ -73,7 +73,7 @@ class Logger:
             message: The message to log
             attrs: Additional attributes to include with the log
         """
-        caller_attrs = self._get_caller_attrs()
+        caller_attrs = self._get_call_stack()
         self._log(LogLevel.INFO, message, None, {**attrs, **caller_attrs})
         self._passthrough(message)
 
@@ -85,7 +85,7 @@ class Logger:
             message: The message to log
             attrs: Additional attributes to include with the log
         """
-        caller_attrs = self._get_caller_attrs()
+        caller_attrs = self._get_call_stack()
         self._log(LogLevel.WARN, message, None, {**attrs, **caller_attrs})
         self._passthrough(message)
 
@@ -98,7 +98,7 @@ class Logger:
             attrs: Additional attributes to include with the log
             error: An optional exception to include with the log
         """
-        caller_attrs = self._get_caller_attrs()
+        caller_attrs = self._get_call_stack()
         attrs_with_error = attrs
         if error:
             attrs_with_error['error'] = str(error)
@@ -131,25 +131,24 @@ class Logger:
         return severity_map.get(level, SeverityNumber.INFO)
 
     @staticmethod
-    def _get_caller_attrs() -> Dict[str, Any]:
-        frame = inspect.currentframe()
-        try:
-            caller = frame.f_back.f_back
-            if caller is None:
-                return {}
-            return {
-                'caller.file': caller.f_code.co_filename,
-                'caller.line': caller.f_lineno,
-                'caller.function': caller.f_code.co_name
-            }
-        finally:
-            del frame
+    def _get_call_stack() -> Dict[str, Any]:
+        stack = traceback.extract_stack()[:-2]
+        formatted_stack = "Traceback (most recent call last):\n" + "\n".join(
+            f'  File "{frame.filename}", line {frame.lineno}, in {frame.name}\n\t{frame.line}'
+            for frame in reversed(stack)
+        )
+        frame = stack[-2]
+        return {
+            'process.stack': formatted_stack,
+            'caller.file': frame.filename,
+            'caller.line': frame.lineno,
+            'caller.function': frame.name,
+        }
 
     def _get_logger_provider(self, options: LoggerOptions) -> LoggerProvider:
         if options.otel_provider:
             return options.otel_provider
 
-        name = options.name
         url = options.url
         token = options.token
 
