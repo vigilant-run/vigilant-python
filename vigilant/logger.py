@@ -8,7 +8,6 @@ from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.semconv.resource import ResourceAttributes
 from opentelemetry._logs import SeverityNumber
-from opentelemetry._logs import Logger as OTELLogger
 
 
 class LogLevel(str, Enum):
@@ -28,13 +27,9 @@ class LoggerOptions:
         passthrough (bool): Whether to also print logs to stdout
         insecure (bool): Whether to use insecure connection for gRPC
         attributes (List[Dict[str, Any]]): Additional attributes to include with all logs
-        otel_provider (Optional[LoggerProvider]): Optional custom LoggerProvider instance
-        otel_logger (Optional[OTELLogger]): Optional custom Logger instance
     """
 
     def __init__(self):
-        self.otel_provider: Optional[LoggerProvider] = None
-        self.otel_logger: Optional[OTELLogger] = None
         self.name: str = "service"
         self.attributes: List[Dict[str, Any]] = []
         self.url: str = "log.vigilant.run:4317"
@@ -46,12 +41,13 @@ class LoggerOptions:
 
 class Logger:
     def __init__(self, options: LoggerOptions):
-        self.otel_provider = self._get_logger_provider(options)
-        self.otel_logger = self.otel_provider.get_logger(options.name)
         self.name = options.name
         self.attributes = options.attributes
         self.passthrough = options.passthrough
         self.noop = options.noop
+        self.otel_exporter = self._get_exporter(options)
+        self.otel_provider = self._get_logger_provider()
+        self.otel_logger = self.otel_provider.get_logger(self.name)
 
     def debug(self, message: str, attrs: Dict[str, Any] = {}):
         """
@@ -106,22 +102,14 @@ class Logger:
                   **attrs_with_error, **caller_attrs})
         self._passthrough(message)
 
-    def shutdown(self):
-        """
-        Shutdown the logger and flush any remaining logs
-        """
-        self.otel_provider.force_flush()
-
     def _passthrough(self, message: str):
         if self.passthrough:
             print(message)
 
-    @staticmethod
-    def _get_severity(level: LogLevel) -> str:
+    def _get_severity(self, level: LogLevel) -> str:
         return level.value
 
-    @staticmethod
-    def _get_severity_number(level: LogLevel) -> SeverityNumber:
+    def _get_severity_number(self, level: LogLevel) -> SeverityNumber:
         severity_map = {
             LogLevel.DEBUG: SeverityNumber.DEBUG,
             LogLevel.INFO: SeverityNumber.INFO,
@@ -130,14 +118,13 @@ class Logger:
         }
         return severity_map.get(level, SeverityNumber.INFO)
 
-    @staticmethod
-    def _get_call_stack() -> Dict[str, Any]:
+    def _get_call_stack(self) -> Dict[str, Any]:
         stack = traceback.extract_stack()[:-2]
         formatted_stack = "Traceback (most recent call last):\n" + "\n".join(
             f'  File "{frame.filename}", line {frame.lineno}, in {frame.name}\n\t{frame.line}'
             for frame in reversed(stack)
         )
-        frame = stack[-2]
+        frame = stack[-1]
         return {
             'process.stack': formatted_stack,
             'caller.file': frame.filename,
@@ -145,22 +132,20 @@ class Logger:
             'caller.function': frame.name,
         }
 
-    def _get_logger_provider(self, options: LoggerOptions) -> LoggerProvider:
-        if options.otel_provider:
-            return options.otel_provider
-
+    def _get_exporter(self, options: LoggerOptions) -> OTLPLogExporter:
         url = options.url
         token = options.token
-
-        exporter = OTLPLogExporter(
+        return OTLPLogExporter(
             endpoint=url,
             headers={"x-vigilant-token": token},
-            insecure=options.insecure
+            insecure=options.insecure,
+            timeout=0
         )
 
+    def _get_logger_provider(self) -> LoggerProvider:
         provider = LoggerProvider()
-        provider.add_log_record_processor(BatchLogRecordProcessor(exporter))
-
+        provider.add_log_record_processor(
+            BatchLogRecordProcessor(self.otel_exporter))
         return provider
 
     def _log(self, level: LogLevel, message: str, error: Optional[Exception], attrs: Dict[str, Any]):

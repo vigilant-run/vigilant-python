@@ -31,9 +31,6 @@ try:
     raise ValueError("Something went wrong")
 except Exception as e:
     logger.error("Operation failed", error=e)
-
-# Application shutdown
-logger.shutdown()
 ```
 
 ## Usage (Autocapture)
@@ -62,7 +59,4 @@ try:
     raise ValueError("Something went wrong")
 except Exception as e:
     print("Operation failed", error=e)
-
-# Application shutdown
-logger.shutdown()
 ```

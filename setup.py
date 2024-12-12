@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-VERSION = "1.0.2"
+VERSION = "1.0.3"
 
 setup(
     name="vigilant-py",
@@ -12,7 +12,7 @@ setup(
         "opentelemetry-sdk>=1.20.0",
         "opentelemetry-exporter-otlp-proto-grpc>=1.20.0",
         "protobuf>=4.24.0",
-        "grpcio>=1.59.0",
+        "grpcio>=1.67.1",
     ],
     python_requires=">=3.7",
 )

@@ -1,5 +1,5 @@
 import sys
-from .logger import Logger, LoggerOptions
+from .logger import Logger, LoggerOptions, LogLevel
 from typing import List, Dict, Any
 
 
@@ -30,7 +30,9 @@ class AutocaptureLogger(Logger):
         if '\n' in self._stdout_buffer:
             lines = self._stdout_buffer.split('\n')
             for line in lines[:-1]:
-                self.info(line)
+                caller_attrs = self._get_call_stack()
+                self._log(LogLevel.INFO, line, None, {**caller_attrs})
+                self._passthrough(line)
             self._stdout_buffer = lines[-1]
 
     def _stderr_write(self, message):
@@ -38,7 +40,9 @@ class AutocaptureLogger(Logger):
         if '\n' in self._stderr_buffer:
             lines = self._stderr_buffer.split('\n')
             for line in lines[:-1]:
-                self.error(line)
+                caller_attrs = self._get_call_stack()
+                self._log(LogLevel.ERROR, line, None, {**caller_attrs})
+                self._passthrough(line)
             self._stderr_buffer = lines[-1]
 
     def _passthrough(self, message: str):
