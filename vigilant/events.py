@@ -6,10 +6,22 @@ import requests
 import sys
 import platform
 import json
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 import inspect
+from datetime import datetime
 
 EVENTS_PATH = "/api/events"
+PROHIBITED_MODULES = [
+    "site-packages",
+    "dist-packages",
+    "python3",
+    "lib/python",
+    "tests/",
+    "testing/",
+    "vendor/",
+    "third_party/",
+    "vigilant",
+]
 
 
 class EventHandlerOptions:
@@ -40,7 +52,7 @@ class InternalEvent:
         timestamp (float): The UNIX timestamp of when the event occurred.
         message (Optional[str]): The event message (if any).
         exceptions (List[Dict[str, Any]]): A list of exception information.
-        metadata (Dict[str, str]): Metadata about the event context.
+        metadata (Dict[str, Any]): Metadata about the event context.
     """
 
     def __init__(
@@ -48,7 +60,7 @@ class InternalEvent:
         timestamp: float,
         message: Optional[str],
         exceptions: List[Dict[str, Any]],
-        metadata: Dict[str, str],
+        metadata: Dict[str, Any],
     ):
         self.timestamp = timestamp
         self.message = message
@@ -80,11 +92,15 @@ class EventHandler:
         """
         if self.options.noop:
             return
-        event = self._parse_message(message)
+        event = InternalEvent(
+            timestamp=time.time(),
+            message=message,
+            exceptions=[],
+            metadata=self._get_metadata()
+        )
         try:
             self.queue.put_nowait(event)
         except queue.Full:
-            # If the queue is full, we drop the event or handle accordingly
             pass
 
     def capture_error(self, err: Exception) -> None:
@@ -93,7 +109,20 @@ class EventHandler:
         """
         if self.options.noop:
             return
-        event = self._parse_error(err)
+        exc_name = type(err).__name__
+        exc_msg = str(err)
+        frames = self._get_stack_frames(skip=2)
+
+        event = InternalEvent(
+            timestamp=time.time(),
+            message=None,
+            exceptions=[{
+                "type": exc_name,
+                "value": exc_msg,
+                "stack": frames
+            }],
+            metadata=self._get_metadata()
+        )
         try:
             self.queue.put_nowait(event)
         except queue.Full:
@@ -117,12 +146,10 @@ class EventHandler:
         while not self.stop_event.is_set():
             now = time.time()
 
-            # If it's time to flush, or queue is empty but there's leftover in batch
             if now >= next_flush_time:
                 self._flush_batch()
                 next_flush_time = now + (flush_interval_ms / 1000.0)
             else:
-                # Wait for the queue or for the next flush time
                 sleep_time = min(next_flush_time - now, 0.1)
                 try:
                     event = self.queue.get(timeout=sleep_time)
@@ -131,7 +158,6 @@ class EventHandler:
                 except queue.Empty:
                     pass
 
-        # On shutdown, flush any remaining events
         self._drain_queue()
         self._flush_batch()
 
@@ -146,7 +172,10 @@ class EventHandler:
                 break
 
     def _flush_batch(self):
-        """ Sends the current batch of events to the server, if any exist. """
+        """
+        Sends the current batch of events to the server, if any exist,
+        converting the data to match the Go struct definitions.
+        """
         with self.lock:
             to_send = self.batch[:]
             self.batch = []
@@ -156,23 +185,24 @@ class EventHandler:
 
         data = []
         for event in to_send:
+            iso_ts = datetime.utcfromtimestamp(
+                event.timestamp).isoformat() + "Z"
+            msg = event.message if event.message else None
             data.append({
-                "Timestamp": event.timestamp,
-                "Message": event.message,
-                "Exceptions": event.exceptions,
-                "Metadata": event.metadata,
+                "timestamp": iso_ts,
+                "message": msg,
+                "exceptions": event.exceptions,
+                "metadata": event.metadata
             })
 
         try:
             response = self._send_batch(data)
             if response.status_code < 200 or response.status_code >= 300:
-                # If there's a server error, handle logging or retry as needed
                 print(
                     f"Event server returned status code {response.status_code}",
                     file=sys.stderr
                 )
         except Exception as send_err:
-            # Handle exceptions from requests
             print(f"Failed to send events: {send_err}", file=sys.stderr)
 
     def _send_batch(self, data: List[Dict[str, Any]]) -> requests.Response:
@@ -181,48 +211,23 @@ class EventHandler:
             "Content-Type": "application/json",
             "x-vigilant-token": self.options.token,
         }
-        # If insecure is True, we skip TLS verification
         verify_tls = not self.options.insecure
         return requests.post(
-            self.options.url,
+            self.options.url + EVENTS_PATH,
             headers=headers,
             data=json.dumps(data),
             timeout=self.client_timeout,
             verify=verify_tls
         )
 
-    def _parse_message(self, message: str) -> InternalEvent:
-        """ Creates an InternalEvent object from a message. """
-        return InternalEvent(
-            timestamp=time.time(),
-            message=message,
-            exceptions=[],
-            metadata=self._get_metadata(),
-        )
-
-    def _parse_error(self, err: Exception) -> InternalEvent:
-        """ Creates an InternalEvent object from an error. """
-        exc_type = type(err)
-        exc_name = exc_type.__name__
-        exc_msg = str(err)
-        return InternalEvent(
-            timestamp=time.time(),
-            message=None,
-            exceptions=[{
-                "Type": exc_name,
-                "Value": exc_msg,
-                "Stack": self._get_stack_trace(err),
-            }],
-            metadata=self._get_metadata(),
-        )
-
-    def _get_metadata(self) -> Dict[str, str]:
+    def _get_metadata(self) -> Dict[str, Any]:
         """
-        Gather some metadata about the context of the error/message,
-        including function name, file name, line number, OS, etc.
+        Gathers metadata for an event, including a raw stack (similar to debug.Stack())
+        and basic system info. This is somewhat analogous to the Go getMetadata().
         """
         filename, line, function = self._caller_info(skip=3)
-        md = {
+
+        return {
             "service": self.options.name,
             "function": function,
             "filename": filename,
@@ -230,9 +235,8 @@ class EventHandler:
             "os": sys.platform,
             "arch": platform.machine(),
             "python.version": platform.python_version(),
-            "stack": "".join(traceback.format_stack(limit=20)),
+            "stack": "".join(traceback.format_stack(limit=25)),
         }
-        return md
 
     def _caller_info(self, skip: int = 2):
         """
@@ -245,9 +249,49 @@ class EventHandler:
         frame = stack[skip]
         return (frame.filename, frame.lineno, frame.function)
 
-    def _get_stack_trace(self, err: Exception) -> str:
-        """ Returns a formatted traceback for the given exception. """
-        return "".join(traceback.format_exception(type(err), err, err.__traceback__))
+    def _get_stack_frames(self, skip: int = 0) -> List[Dict[str, Any]]:
+        """
+        Parse the Python call stack:
+        - Reverse the frame list
+        - Identify a 'module' and 'function'
+        - Mark frames as internal vs external if they match PROHIBITED_MODULES
+        """
+        raw_stack = traceback.extract_stack(limit=50)
+        stack_frames = raw_stack[:-skip] if skip > 0 else raw_stack
+
+        frames = []
+        for sf in stack_frames:
+            function_full = sf.name
+            filename = sf.filename
+            lineno = sf.lineno
+
+            module, function = self._split_function_name(function_full)
+
+            is_internal = True
+            for pmod in PROHIBITED_MODULES:
+                if pmod in module or pmod in filename:
+                    is_internal = False
+                    break
+
+            frames.append({
+                "function": function,
+                "module": module,
+                "file": filename,
+                "line": lineno,
+                "internal": is_internal
+            })
+
+        frames.reverse()
+        return frames
+
+    def _split_function_name(self, name: str) -> Tuple[str, str]:
+        """
+        Splits a path-qualified function name into module + function.
+        """
+        if "." not in name:
+            return ("", name)
+        idx = name.rfind(".")
+        return (name[:idx], name[idx+1:])
 
 
 def create_event_handler(
