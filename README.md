@@ -8,7 +8,7 @@ This is the Python SDK for the Vigilant logging platform. It is a wrapper around
 pip install vigilant-py
 ```
 
-## Usage (Standard)
+## Logging Usage (Standard)
 The standard logger is a wrapper around the OpenTelemetry logger. It allows you to log messages with attributes and metadata. The logs are sent to Vigilant and viewable in the dashboard.
 ```python
 from vigilant import create_logger
@@ -33,7 +33,7 @@ except Exception as e:
     logger.error("Operation failed", error=e)
 ```
 
-## Usage (Autocapture)
+## Logging Usage (Autocapture)
 There is an additional logger that captures stdout and stderr and logs it to Vigilant. This is allow you to capture logs without using the logger. There is no metadata or attributes attached to the logs.
 ```python
 from vigilant import create_autocapture_logger
@@ -59,4 +59,26 @@ try:
     raise ValueError("Something went wrong")
 except Exception as e:
     print("Operation failed", error=e)
+```
+
+## Events Usage
+The events handler is used to capture errors and send them to Vigilant.
+```python
+from vigilant import create_event_handler
+
+# Initialize the event handler
+handler = create_event_handler(
+    url="https://errors.vigilant.run",
+    name="my-service",
+    token="your-token",
+)
+
+# Create an error
+error = ValueError("Something went wrong")
+
+# Capture an error
+handler.capture_error(error)
+
+# Shutdown the handler
+handler.shutdown()
 ```
