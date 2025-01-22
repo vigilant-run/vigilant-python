@@ -2,6 +2,7 @@ from enum import Enum
 import time
 import traceback
 from typing import Optional, List, Dict, Any
+from vigilant.context import get_attributes
 from opentelemetry.sdk._logs import LoggerProvider, LogRecord
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
@@ -160,6 +161,10 @@ class Logger:
                 'error.stack': getattr(error, '__traceback__', None) and ''.join(traceback.format_tb(error.__traceback__))
             })
 
+        additional_attributes = self._get_attributes()
+        if additional_attributes:
+            attributes.update(additional_attributes)
+
         resource = Resource.create({
             ResourceAttributes.SERVICE_NAME: self.name
         })
@@ -177,6 +182,9 @@ class Logger:
         )
 
         self.otel_logger.emit(record)
+
+    def _get_attributes(self) -> Dict[str, str]:
+        return get_attributes()
 
 
 def create_logger(

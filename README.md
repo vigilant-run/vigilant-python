@@ -61,24 +61,38 @@ except Exception as e:
     print("Operation failed", error=e)
 ```
 
-## Events Usage
-The events handler is used to capture errors and send them to Vigilant.
-```python
-from vigilant import create_event_handler
+## Logging Usage (Attributes)
+The attributes are stored in the context of the thread. You can add, remove, and clear attributes in the context. The callbacks can be nested to create a chain of context modifications.
 
-# Initialize the event handler
-handler = create_event_handler(
-    url="https://errors.vigilant.run",
-    name="my-service",
-    token="your-token",
+```python
+from vigilant import create_autocapture_logger
+from vigilant import add_attributes, remove_attributes, clear_attributes
+
+# Create a logger
+logger = create_autocapture_logger(
+    url="log.vigilant.run:4317",
+    token="my-token",
+    name="my-service"
 )
 
-# Create an error
-error = ValueError("Something went wrong")
+# Enable autocapture
+logger.enable()
 
-# Capture an error
-handler.capture_error(error)
-
-# Shutdown the handler
-handler.shutdown()
+# Add multiple attributes
+add_attributes({"user_id": "1", "another_user_id": "2"}, callback=lambda: {
+    # Both attributes present
+    print("Testing with two attributes"),
+    
+    # Remove one attribute
+    remove_attributes(["user_id"], callback=lambda: {
+        # Only another_user_id remains
+        print("Testing with one attribute"),
+        
+        # Clear all remaining attributes
+        clear_attributes(callback=lambda: {
+            # No attributes present
+            print("Testing without attributes")
+        })
+    })
+})
 ```

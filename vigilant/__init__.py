@@ -1,9 +1,9 @@
 from .logger import Logger, create_logger
 from .autocapture import AutocaptureLogger, create_autocapture_logger
-from .events import EventHandler, create_event_handler
+from .context import add_attributes, remove_attributes, clear_attributes, get_attributes
 
 __all__ = [
     'Logger', 'create_logger',
     'AutocaptureLogger', 'create_autocapture_logger',
-    'EventHandler', 'create_event_handler'
+    'add_attributes', 'remove_attributes', 'clear_attributes', 'get_attributes'
 ]
