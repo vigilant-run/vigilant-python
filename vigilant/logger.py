@@ -1,230 +1,177 @@
-from enum import Enum
+import sys
+import json
 import time
-import traceback
-from typing import Optional, List, Dict, Any
+import threading
+import queue
+import requests
+from enum import Enum
+from typing import Optional, Dict, Any, List
 from vigilant.context import get_attributes
-from opentelemetry.sdk._logs import LoggerProvider, LogRecord
-from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
-from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.semconv.resource import ResourceAttributes
-from opentelemetry._logs import SeverityNumber
 
 
 class LogLevel(str, Enum):
     INFO = "INFO"
-    WARN = "WARN"
+    WARNING = "WARNING"
     ERROR = "ERROR"
     DEBUG = "DEBUG"
 
 
-class LoggerOptions:
-    """Configuration options for the Logger.
-
-    Attributes:
-        name (str): Name of the service you are logging from. Used as service.name in logs.
-        url (str): The URL of the logging endpoint (e.g., 'log.vigilant.run:4317')
-        token (str): Authentication token for the logging service
-        passthrough (bool): Whether to also print logs to stdout
-        insecure (bool): Whether to use insecure connection for gRPC
-        attributes (List[Dict[str, Any]]): Additional attributes to include with all logs
-    """
-
-    def __init__(self):
-        self.name: str = "service"
-        self.attributes: List[Dict[str, Any]] = []
-        self.url: str = "log.vigilant.run:4317"
-        self.token: str = "tk_1234567890"
-        self.passthrough: bool = True
-        self.noop: bool = False
-        self.insecure: bool = False
-
-
 class Logger:
-    def __init__(self, options: LoggerOptions):
-        self.name = options.name
-        self.attributes = options.attributes
-        self.passthrough = options.passthrough
-        self.noop = options.noop
-        self.otel_exporter = self._get_exporter(options)
-        self.otel_provider = self._get_logger_provider()
-        self.otel_logger = self.otel_provider.get_logger(self.name)
+    def __init__(self,
+                 name: str = "app-name",
+                 endpoint: str = "ingress.vigilant.run",
+                 token: str = "tk_1234567890",
+                 passthrough: bool = True,
+                 insecure: bool = False,
+                 noop: bool = False):
+        self.original_stdout_write = sys.stdout.write
+        self.original_stderr_write = sys.stderr.write
+        self._stdout_buffer = ""
+        self._stderr_buffer = ""
 
-    def debug(self, message: str, attrs: Dict[str, Any] = {}):
-        """
-        Log a debug message
+        self.name = name
+        self.endpoint = endpoint
+        self.token = token
+        self.passthrough = passthrough
+        self.insecure = insecure
+        self.noop = noop
 
-        Args:
-            message: The message to log
-            attrs: Additional attributes to include with the log
-        """
-        caller_attrs = self._get_call_stack()
-        self._log(LogLevel.DEBUG, message, None, {**attrs, **caller_attrs})
-        self._passthrough(message)
+        self.logs_queue = queue.Queue(maxsize=1000)
+        self.batch_stop = threading.Event()
+        self.batch_thread = None
+        self._start_batcher()
 
-    def info(self, message: str, attrs: Dict[str, Any] = {}):
-        """
-        Log an info message
+    def debug(self, message: str, attrs: Dict[str, Any] = None):
+        self._log(LogLevel.DEBUG, message, None, attrs or {})
 
-        Args:
-            message: The message to log
-            attrs: Additional attributes to include with the log
-        """
-        caller_attrs = self._get_call_stack()
-        self._log(LogLevel.INFO, message, None, {**attrs, **caller_attrs})
-        self._passthrough(message)
+    def info(self, message: str, attrs: Dict[str, Any] = None):
+        self._log(LogLevel.INFO, message, None, attrs or {})
 
-    def warn(self, message: str, attrs: Dict[str, Any] = {}):
-        """
-        Log a warning message
+    def warn(self, message: str, attrs: Dict[str, Any] = None):
+        self._log(LogLevel.WARNING, message, None, attrs or {})
 
-        Args:
-            message: The message to log
-            attrs: Additional attributes to include with the log
-        """
-        caller_attrs = self._get_call_stack()
-        self._log(LogLevel.WARN, message, None, {**attrs, **caller_attrs})
-        self._passthrough(message)
+    def error(self, message: str, error: Optional[Exception] = None, attrs: Dict[str, Any] = None):
+        self._log(LogLevel.ERROR, message, error, attrs or {})
 
-    def error(self, message: str, attrs: Dict[str, Any] = {}, error: Optional[Exception] = None):
-        """
-        Log an error message
+    def autocapture_enable(self):
+        sys.stdout.write = self._stdout_write
+        sys.stderr.write = self._stderr_write
 
-        Args:
-            message: The message to log
-            attrs: Additional attributes to include with the log
-            error: An optional exception to include with the log
-        """
-        caller_attrs = self._get_call_stack()
-        attrs_with_error = attrs
-        if error:
-            attrs_with_error['error'] = str(error)
-        self._log(LogLevel.ERROR, message, error, {
-                  **attrs_with_error, **caller_attrs})
-        self._passthrough(message)
+    def autocapture_disable(self):
+        sys.stdout.write = self.original_stdout_write
+        sys.stderr.write = self.original_stderr_write
 
-    def _passthrough(self, message: str):
-        if self.passthrough:
-            print(message)
-
-    def _get_severity(self, level: LogLevel) -> str:
-        return level.value
-
-    def _get_severity_number(self, level: LogLevel) -> SeverityNumber:
-        severity_map = {
-            LogLevel.DEBUG: SeverityNumber.DEBUG,
-            LogLevel.INFO: SeverityNumber.INFO,
-            LogLevel.WARN: SeverityNumber.WARN,
-            LogLevel.ERROR: SeverityNumber.ERROR,
-        }
-        return severity_map.get(level, SeverityNumber.INFO)
-
-    def _get_call_stack(self) -> Dict[str, Any]:
-        stack = traceback.extract_stack()[:-2]
-        formatted_stack = "Traceback (most recent call last):\n" + "\n".join(
-            f'  File "{frame.filename}", line {frame.lineno}, in {frame.name}\n\t{frame.line}'
-            for frame in reversed(stack)
-        )
-        frame = stack[-1]
-        return {
-            'process.stack': formatted_stack,
-            'caller.file': frame.filename,
-            'caller.line': frame.lineno,
-            'caller.function': frame.name,
-        }
-
-    def _get_exporter(self, options: LoggerOptions) -> OTLPLogExporter:
-        url = options.url
-        token = options.token
-        return OTLPLogExporter(
-            endpoint=url,
-            headers={"x-vigilant-token": token},
-            insecure=options.insecure,
-            timeout=0
-        )
-
-    def _get_logger_provider(self) -> LoggerProvider:
-        provider = LoggerProvider()
-        provider.add_log_record_processor(
-            BatchLogRecordProcessor(self.otel_exporter))
-        return provider
+    def shutdown(self):
+        self._stop_batcher()
 
     def _log(self, level: LogLevel, message: str, error: Optional[Exception], attrs: Dict[str, Any]):
         if self.noop:
             return
 
-        attributes = attrs.copy()
+        caller_attrs = get_attributes()
+        combined_attrs = {**attrs, **caller_attrs}
         if error:
-            attributes.update({
-                'error.type': error.__class__.__name__,
-                'error.message': str(error),
-                'error.stack': getattr(error, '__traceback__', None) and ''.join(traceback.format_tb(error.__traceback__))
-            })
+            combined_attrs["error"] = str(error)
 
-        additional_attributes = self._get_attributes()
-        if additional_attributes:
-            attributes.update(additional_attributes)
+        combined_attrs["service.name"] = self.name
 
-        resource = Resource.create({
-            ResourceAttributes.SERVICE_NAME: self.name
-        })
+        log_record = {
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time())),
+            "body": message,
+            "level": level,
+            "attributes": combined_attrs,
+        }
 
-        record = LogRecord(
-            timestamp=int(time.time() * 1e9),
-            severity_text=self._get_severity(level),
-            severity_number=self._get_severity_number(level),
-            body=message,
-            attributes=attributes,
-            resource=resource,
-            trace_id=0,
-            span_id=0,
-            trace_flags=0,
+        try:
+            self.logs_queue.put_nowait(log_record)
+        except queue.Full:
+            pass
+
+        self._passthrough(message)
+
+    def _start_batcher(self):
+        self.batch_thread = threading.Thread(
+            target=self._run_batcher, daemon=True
         )
+        self.batch_thread.start()
 
-        self.otel_logger.emit(record)
+    def _stop_batcher(self):
+        self.batch_stop.set()
 
-    def _get_attributes(self) -> Dict[str, str]:
-        return get_attributes()
+        remaining_logs = []
+        while True:
+            try:
+                log = self.logs_queue.get_nowait()
+                remaining_logs.append(log)
+            except queue.Empty:
+                break
 
+        if remaining_logs:
+            self._send_batch(remaining_logs)
 
-def create_logger(
-    *,
-    url: str,
-    token: str,
-    name: str,
-    passthrough: bool = True,
-    insecure: bool = False,
-    noop: bool = False,
-    attributes: List[Dict[str, Any]] = None,
-) -> Logger:
-    """Create a new Logger instance for sending logs to Vigilant.
+        if self.batch_thread is not None:
+            self.batch_thread.join()
 
-    Args:
-        url (str): The URL of the logging endpoint (e.g., 'log.vigilant.run:4317')
-        token (str): Authentication token for the logging service
-        name (str): Name of the service you are logging from. Used as service.name in logs.
-        passthrough (bool, optional): Whether to also print logs to stdout. Defaults to True.
-        insecure (bool, optional): Whether to use insecure gRPC connection. Defaults to False.
-        noop (bool, optional): Whether to disable logging. Defaults to False.
-        attributes (List[Dict[str, Any]], optional): Additional attributes to include with all logs. Defaults to None.
+    def _run_batcher(self):
+        max_batch_size = 100
+        batch_interval = 0.1
+        buffer: List[Dict[str, Any]] = []
 
-    Returns:
-        Logger: A configured logger instance ready to send logs to Vigilant
+        while not self.batch_stop.is_set():
+            try:
+                record = self.logs_queue.get(timeout=batch_interval)
+                if record is not None:
+                    buffer.append(record)
 
-    Example:
-        >>> logger = create_logger(
-        ...     url="log.vigilant.run:4317",
-        ...     token="your_token",
-        ...     name="my-service"
-        ... )
-        >>> logger.info("Hello, world!")
-    """
-    options = LoggerOptions()
-    options.name = name
-    options.url = url
-    options.token = token
-    options.passthrough = passthrough
-    options.insecure = insecure
-    options.attributes = attributes or []
-    options.noop = noop
-    return Logger(options)
+                if len(buffer) >= max_batch_size:
+                    self._send_batch(buffer)
+                    buffer.clear()
+
+            except queue.Empty:
+                if buffer:
+                    self._send_batch(buffer)
+                    buffer.clear()
+
+        if buffer:
+            self._send_batch(buffer)
+
+    def _send_batch(self, logs: List[Dict[str, Any]]):
+        if not logs or self.noop:
+            return
+
+        payload = {
+            "token": self.token,
+            "type": "logs",
+            "logs": logs,
+        }
+
+        try:
+            headers = {"Content-Type": "application/json"}
+            resp = requests.post(
+                f"{'http' if self.insecure else 'https'}://{self.endpoint}/api/message",
+                data=json.dumps(payload),
+                headers=headers,
+            )
+            resp.raise_for_status()
+        except Exception:
+            pass
+
+    def _stdout_write(self, message):
+        self._stdout_buffer += message
+        if '\n' in self._stdout_buffer:
+            lines = self._stdout_buffer.split('\n')
+            for line in lines[:-1]:
+                self._log(LogLevel.INFO, line, None, {})
+            self._stdout_buffer = lines[-1]
+
+    def _stderr_write(self, message):
+        self._stderr_buffer += message
+        if '\n' in self._stderr_buffer:
+            lines = self._stderr_buffer.split('\n')
+            for line in lines[:-1]:
+                self._log(LogLevel.ERROR, line, None, {})
+            self._stderr_buffer = lines[-1]
+
+    def _passthrough(self,  message: str):
+        if self.passthrough:
+            self.original_stdout_write(f"{message}\n")
