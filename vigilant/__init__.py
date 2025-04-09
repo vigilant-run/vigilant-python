@@ -1,9 +1,8 @@
-from .logger import Logger
-from .metrics import init_metrics_handler, shutdown_metrics_handler, emit_metric
-from .context import add_attributes, remove_attributes, clear_attributes, get_attributes
+from vigilant.instance import init_vigilant, shutdown_vigilant
+from vigilant.config import VigilantUserConfig
+from vigilant.logs import log_info, log_error, log_warn, log_debug, log_trace
+from vigilant.attributes import add_attributes, get_attributes
 
-__all__ = [
-    'Logger',
-    'add_attributes', 'remove_attributes', 'clear_attributes', 'get_attributes',
-    'init_metrics_handler', 'shutdown_metrics_handler', 'emit_metric',
-]
+__all__ = ['init_vigilant', 'shutdown_vigilant', 'VigilantUserConfig',
+           'log_info', 'log_error', 'log_warn', 'log_debug', 'log_trace',
+           'add_attributes', 'get_attributes']

@@ -1,12 +1,15 @@
 from setuptools import setup, find_packages
 
-VERSION = "2.0.1"
-
 setup(
     name="vigilant-py",
-    version=VERSION,
-    description="Python SDK for the Vigilant logging platform",
+    version="3.0.0",
+    author="Vigilant Team",
+    author_email="support@vigilant.run",
+    url="https://vigilant.run",
+    description="Python SDK for Vigilant (https://vigilant.run)",
     packages=find_packages(exclude=["tests*"]),
-    install_requires=["requests>=2.31.0"],
+    install_requires=[
+        "requests>=2.28.0",
+    ],
     python_requires=">=3.7",
 )
