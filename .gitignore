@@ -1,5 +1,5 @@
-vigilant_py.egg-info/
+vigilant_sdk.egg-info/
 dist/
 build/
-vigilant/__pycache__/
+vigilant_sdk/__pycache__/
 __pycache__/
