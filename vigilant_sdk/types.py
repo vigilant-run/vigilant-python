@@ -24,3 +24,18 @@ class Log(TypedDict):
 
     def to_string(self) -> str:
         return self.__str__()
+
+
+class Alert(TypedDict):
+    timestamp: str
+    title: str
+    attributes: Dict[str, str]
+
+    def __str__(self) -> str:
+        attributes_str = ""
+        for key, value in self.attributes.items():
+            attributes_str += f"{key}={value} "
+        return f"{self.title} {attributes_str}"
+
+    def to_string(self) -> str:
+        return self.__str__()

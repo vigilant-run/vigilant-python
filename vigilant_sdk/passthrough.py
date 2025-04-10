@@ -1,6 +1,6 @@
 import sys
 from typing import Callable
-from vigilant_sdk.types import LogLevel, Log
+from vigilant_sdk.types import LogLevel, Log, Alert
 from datetime import datetime
 
 
@@ -22,6 +22,9 @@ class EventPassthrough:
             case _:
                 self.stdout_write(self._format_log(log) + "\n")
 
+    def alert_passthrough(self, alert: Alert):
+        self.stderr_write(self._format_alert(alert) + "\n")
+
     def _format_log(self, log: Log) -> str:
         timestamp_str = self._format_timestamp(log.get('timestamp', ''))
         attributes_str = ""
@@ -30,6 +33,13 @@ class EventPassthrough:
         level_str = log.get('level', '')
         body_str = log.get('body', '')
         return f"[{timestamp_str}] [{level_str}] {body_str} {attributes_str}".strip()
+
+    def _format_alert(self, alert: Alert) -> str:
+        timestamp_str = self._format_timestamp(alert.get('timestamp', ''))
+        attributes_str = ""
+        for key, value in alert.get("attributes", {}).items():
+            attributes_str += f"{key}={value} "
+        return f"[{timestamp_str}] {alert.get('title', '')} {attributes_str}".strip()
 
     def _format_timestamp(self, timestamp_str: str) -> str:
         try:

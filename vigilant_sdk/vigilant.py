@@ -1,6 +1,6 @@
 from typing import TypedDict
 from vigilant_sdk.batcher import Batcher
-from vigilant_sdk.types import Log
+from vigilant_sdk.types import Log, Alert
 from vigilant_sdk.passthrough import EventPassthrough
 from vigilant_sdk.router import LogRouter
 from vigilant_sdk.attributes import AttributeProvider
@@ -31,6 +31,7 @@ class Vigilant:
     noop: bool
 
     log_batcher: Batcher[Log]
+    alert_batcher: Batcher[Alert]
     event_passthrough: EventPassthrough
     log_router: LogRouter
     attribute_provider: AttributeProvider
@@ -41,6 +42,7 @@ class Vigilant:
         self.noop = config['noop']
 
         self.log_batcher = create_log_batcher(config)
+        self.alert_batcher = create_alert_batcher(config)
         self.event_passthrough = EventPassthrough()
         self.log_router = LogRouter(self.send_log)
         self.attribute_provider = AttributeProvider(config['name'])
@@ -50,6 +52,7 @@ class Vigilant:
             return
 
         self.log_batcher.start()
+        self.alert_batcher.start()
 
         if self.autocapture:
             self.log_router.enable()
@@ -65,6 +68,7 @@ class Vigilant:
             self.log_router.disable()
 
         self.log_batcher.shutdown()
+        self.alert_batcher.shutdown()
 
     def send_log(self, log: Log):
         """
@@ -82,6 +86,22 @@ class Vigilant:
 
         self.log_batcher.add(log)
 
+    def send_alert(self, alert: Alert):
+        """
+        Send an alert to Vigilant via the batcher.
+        If passthrough, the alert will be passed through to stdout or stderr.
+        If noop, the alert will not be sent to Vigilant.
+        """
+        self.attribute_provider.update_attributes(alert['attributes'])
+
+        if self.passthrough:
+            self.event_passthrough.alert_passthrough(alert)
+
+        if self.noop:
+            return
+
+        self.alert_batcher.add(alert)
+
 
 def create_log_batcher(config: VigilantConfig) -> Batcher[Log]:
     return Batcher(
@@ -90,6 +110,18 @@ def create_log_batcher(config: VigilantConfig) -> Batcher[Log]:
         token=config['token'],
         type_name="logs",
         key="logs",
+        batch_interval_seconds=0.1,
+        max_batch_size=1000,
+    )
+
+
+def create_alert_batcher(config: VigilantConfig) -> Batcher[Alert]:
+    return Batcher(
+        endpoint=create_formatted_endpoint(
+            config['endpoint'], config['insecure']),
+        token=config['token'],
+        type_name="alerts",
+        key="alerts",
         batch_interval_seconds=0.1,
         max_batch_size=1000,
     )

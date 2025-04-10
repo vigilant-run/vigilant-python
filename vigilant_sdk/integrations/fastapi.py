@@ -6,6 +6,7 @@ from typing import Optional, TypedDict
 from fastapi.websockets import WebSocketDisconnect
 from vigilant_sdk.attributes import add_attributes_async
 from vigilant_sdk.logs import log_info, log_error
+from vigilant_sdk.alerts import create_alert
 
 try:
     import fastapi
@@ -28,10 +29,14 @@ class MiddlewareConfig(TypedDict):
     # Should add logging middleware (default: True)
     with_logging: Optional[bool]
 
+    # Should add alert middleware (default: True)
+    with_alerting: Optional[bool]
+
 
 _default_middleware_config: MiddlewareConfig = {
     "with_tracing": True,
     "with_logging": True,
+    "with_alerting": True,
 }
 
 
@@ -105,6 +110,19 @@ async def logging_middleware(request: Request, call_next):
         },
     )
     return response
+
+
+async def alerting_middleware(request: Request, call_next):
+    """
+    FastAPI middleware to alert on errors.
+    """
+    try:
+        return await call_next(request)
+    except Exception as e:
+        route_template = request.scope.get("route").path
+        create_alert(
+            f"Unhandled exception for route {route_template}")
+        raise e
 
 
 def add_http_middleware(app: fastapi.FastAPI, config: Optional[MiddlewareConfig] = None):

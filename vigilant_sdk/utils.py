@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from typing import Dict
-from vigilant_sdk.types import LogLevel, Log
+from vigilant_sdk.types import LogLevel, Log, Alert
 
 
 def get_current_timestamp():
@@ -16,5 +16,16 @@ def create_log_instance(message: str, level: LogLevel,
         "timestamp": get_current_timestamp(),
         "body": message,
         "level": level,
+        "attributes": attributes
+    }
+
+
+def create_alert_instance(title: str, attributes: Dict[str, str] = {}) -> Alert:
+    """
+    Creates an alert instance.
+    """
+    return {
+        "timestamp": get_current_timestamp(),
+        "title": title,
         "attributes": attributes
     }
