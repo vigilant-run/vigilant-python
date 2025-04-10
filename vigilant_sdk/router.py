@@ -44,5 +44,5 @@ class LogRouter:
             lines = self._stderr_buffer.split('\n')
             for line in lines[:-1]:
                 self._log_function(
-                    create_log_instance(line, LogLevel.INFO, {}))
+                    create_log_instance(line, LogLevel.ERROR, {}))
             self._stderr_buffer = lines[-1]
