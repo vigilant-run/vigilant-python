@@ -3,6 +3,7 @@ from vigilant_sdk.batcher import Batcher
 from vigilant_sdk.types import Log
 from vigilant_sdk.passthrough import EventPassthrough
 from vigilant_sdk.router import LogRouter
+from vigilant_sdk.attributes import AttributeProvider
 
 
 class VigilantConfig(TypedDict):
@@ -32,6 +33,7 @@ class Vigilant:
     log_batcher: Batcher[Log]
     event_passthrough: EventPassthrough
     log_router: LogRouter
+    attribute_provider: AttributeProvider
 
     def __init__(self, config: VigilantConfig):
         self.passthrough = config['passthrough']
@@ -41,11 +43,14 @@ class Vigilant:
         self.log_batcher = create_log_batcher(config)
         self.event_passthrough = EventPassthrough()
         self.log_router = LogRouter(self.send_log)
+        self.attribute_provider = AttributeProvider(config['name'])
 
     def start(self):
         if self.noop:
             return
+
         self.log_batcher.start()
+
         if self.autocapture:
             self.log_router.enable()
 
@@ -55,8 +60,10 @@ class Vigilant:
         """
         if self.noop:
             return
+
         if self.autocapture:
             self.log_router.disable()
+
         self.log_batcher.shutdown()
 
     def send_log(self, log: Log):
@@ -65,10 +72,14 @@ class Vigilant:
         If passthrough, the log will be passed through to stdout or stderr.
         If noop, the log will not be sent to Vigilant.
         """
+        self.attribute_provider.update_attributes(log['attributes'])
+
         if self.passthrough:
             self.event_passthrough.log_passthrough(log)
+
         if self.noop:
             return
+
         self.log_batcher.add(log)
 
 

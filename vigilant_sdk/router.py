@@ -5,6 +5,9 @@ from vigilant_sdk.utils import create_log_instance
 
 
 class LogRouter:
+    """
+    LogRouter is a class that re-routes stdout and stderr to the log function.
+    """
     stdout_write: Callable[[str], None]
     stderr_write: Callable[[str], None]
     _stdout_buffer: str

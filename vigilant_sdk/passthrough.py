@@ -5,6 +5,9 @@ from datetime import datetime
 
 
 class EventPassthrough:
+    """
+    EventPassthrough is a class that passthroughs events to stdout or stderr.
+    """
     stdout_write: Callable[[str], None]
     stderr_write: Callable[[str], None]
 
