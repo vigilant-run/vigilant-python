@@ -43,3 +43,15 @@ class BatcherInternalServerError(FormattedVigilantError):
         details = """The server is experiencing issues.
 Please contact support@vigilant.run"""
         return f"{self.error_header}\n\n{details}\n\nOriginal error: {self.original_message}"
+
+
+class NotInitializedError(FormattedVigilantError):
+    """Raised when the Vigilant SDK is not initialized."""
+
+    def __init__(self, message: str = "Vigilant SDK not initialized"):
+        super().__init__(message=message)
+
+    def formatted_message(self) -> str:
+        details = """The Vigilant SDK is not initialized.
+Please call init_vigilant() before using the SDK."""
+        return f"{self.error_header}\n\n{details}\n\nOriginal error: {self.original_message}"

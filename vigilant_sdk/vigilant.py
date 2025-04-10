@@ -46,13 +46,22 @@ class Vigilant:
         self.noop = merged_config.noop
 
     def start(self):
-        pass
+        if self.noop:
+            return
 
-    def shutdown(self):
-        pass
+        self.log_batcher.start()
 
-    def send_log(self):
-        pass
+    async def shutdown(self):
+        if self.noop:
+            return
+
+        await self.log_batcher.shutdown()
+
+    def send_log(self, log: Log):
+        if self.noop:
+            return
+
+        self.log_batcher.add(log)
 
 
 def merge_config(user_config: VigilantUserConfig, default_config: VigilantConfig) -> VigilantConfig:
@@ -103,14 +112,14 @@ def init_vigilant(config: VigilantConfig):
     _add_shutdown_listeners()
 
 
-def shutdown_vigilant():
+async def shutdown_vigilant():
     """
     Manually shutdown the global instance and remove the exit listener.
     """
     global _global_instance
-    _remove_shutdown_listeners()  # Remove listener first
+    _remove_shutdown_listeners()
     if _global_instance:
-        _global_instance.shutdown()
+        await _global_instance.shutdown()
         _global_instance = None
 
 

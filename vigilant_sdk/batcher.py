@@ -49,7 +49,7 @@ class Batcher(Generic[T]):
         if len(self._queue) >= self.max_batch_size:
             self._flush_event.set()
 
-    async def start(self) -> None:
+    def start(self) -> None:
         """Starts the batcher background task."""
         if self._batcher_task is not None:
             return
