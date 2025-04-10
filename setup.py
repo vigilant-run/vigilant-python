@@ -9,7 +9,10 @@ setup(
     description="Python SDK for Vigilant (https://vigilant.run)",
     packages=find_packages(exclude=["tests*"]),
     install_requires=[
-        "httpx>=0.25.0",
+        "requests>=2.28.0",
     ],
+    extras_require={
+        "fastapi": ["fastapi>=0.68.0"],
+    },
     python_requires=">=3.7",
 )

@@ -22,7 +22,7 @@ def init_vigilant(user_config: Optional[VigilantUserConfig] = None):
         if _global_instance:
             raise AlreadyInitializedError()
 
-        final_config = merge_config(user_config, _default_config)
+        final_config = _merge_config(user_config, _default_config)
         instance = Vigilant(final_config)
         temp_instance = None
 
@@ -106,7 +106,7 @@ def _remove_shutdown_listeners():
             f"Error unregistering Vigilant shutdown handler: {e}", file=sys.stderr)
 
 
-def merge_config(user_config: Optional[VigilantUserConfig], default_config: VigilantConfig) -> VigilantConfig:
+def _merge_config(user_config: Optional[VigilantUserConfig], default_config: VigilantConfig) -> VigilantConfig:
     user_config_dict = user_config or {}
     merged_dict = {**default_config, **user_config_dict}
     final_config = {k: merged_dict[k]

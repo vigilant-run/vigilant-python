@@ -1,24 +1,46 @@
 import contextvars
-from typing import Callable, Dict, Any, Optional
+from typing import Callable, Dict, Any, Optional, Awaitable
 
 _STORED_ATTRIBUTES: contextvars.ContextVar[Dict[str, Any]] = contextvars.ContextVar(
     "_STORED_ATTRIBUTES", default={})
 
 
-def add_attributes(attributes: Dict[str, str], callback: Optional[Callable[[], None]] = None) -> None:
+def add_attributes(attributes: Dict[str, str], callback: Optional[Callable[[], Any]] = None) -> Any:
     """
     Adds or overwrites attributes in the current context, then
-    executes the callback if provided.
+    executes the callback if provided, returning the callback's result.
     """
     current_store = _STORED_ATTRIBUTES.get()
     updated_store = {**current_store, **attributes}
     token = _STORED_ATTRIBUTES.set(updated_store)
 
+    ret = None
     try:
         if callback:
-            callback()
+            ret = callback()
     finally:
         _STORED_ATTRIBUTES.reset(token)
+
+    return ret
+
+
+async def add_attributes_async(attributes: Dict[str, str], callback: Optional[Callable[[], Awaitable[Any]]] = None) -> Any:
+    """
+    Asynchronously adds or overwrites attributes in the current context,
+    then executes the callback if provided, returning the callback's result.
+    """
+    current_store = _STORED_ATTRIBUTES.get()
+    updated_store = {**current_store, **attributes}
+    token = _STORED_ATTRIBUTES.set(updated_store)
+
+    ret = None
+    try:
+        if callback:
+            ret = await callback()
+    finally:
+        _STORED_ATTRIBUTES.reset(token)
+
+    return ret
 
 
 def get_attributes() -> Dict[str, str]:
@@ -38,6 +60,14 @@ class AttributeProvider:
         self.name = name
 
     def update_attributes(self, attributes: Dict[str, str]):
-        current_store = _STORED_ATTRIBUTES.get()
-        attributes.update(current_store)
-        attributes['service.name'] = self.name
+        current_attributes = get_attributes()
+        merged_attributes = attributes.copy()
+        merged_attributes.update(current_attributes)
+        merged_attributes['service.name'] = self.name
+        filtered_attributes = {
+            k: v
+            for k, v in merged_attributes.items()
+            if isinstance(k, str) and isinstance(v, str)
+        }
+        attributes.clear()
+        attributes.update(filtered_attributes)

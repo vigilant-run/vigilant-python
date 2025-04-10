@@ -15,5 +15,8 @@ authors = [
 urls = { Homepage = "https://vigilant.run" }
 requires-python = ">=3.7"
 dependencies = [
-    "httpx>=0.25.0"
-] 
+    "requests>=2.28.0"
+]
+
+[project.optional-dependencies]
+fastapi = ["fastapi>=0.68.0"] 
