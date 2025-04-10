@@ -1,9 +1,15 @@
-from typing import TypedDict
+import atexit
+from typing import TypedDict, Optional
 from vigilant_sdk.batcher import Batcher
 from vigilant_sdk.logs import Log
+from vigilant_sdk.config import VigilantUserConfig
 
 
 class VigilantConfig(TypedDict):
+    """
+    VigilantConfig is a class used to configure the Vigilant SDK.
+    It requires a name and token to be configured properly.
+    """
     name: str
     token: str
     endpoint: str
@@ -14,6 +20,11 @@ class VigilantConfig(TypedDict):
 
 
 class Vigilant:
+    """
+    Vigilant is a class used to send logs, alerts, and metrics to Vigilant.
+    It can be configured to be a noop, which will prevent it from sending any data to Vigilant.
+    It requires a name and token to be configured properly.
+    """
     name: str
     token: str
     endpoint: str
@@ -24,8 +35,8 @@ class Vigilant:
 
     log_batcher: Batcher[Log]
 
-    def __init__(self, config: VigilantConfig):
-        merged_config = merge_config(config, default_config)
+    def __init__(self, user_config: VigilantUserConfig):
+        merged_config = merge_config(user_config, default_config)
         self.name = merged_config.name
         self.token = merged_config.token
         self.endpoint = create_formatted_endpoint(
@@ -44,8 +55,8 @@ class Vigilant:
         pass
 
 
-def merge_config(config: VigilantConfig, default_config: VigilantConfig) -> VigilantConfig:
-    return {**default_config, **config}
+def merge_config(user_config: VigilantUserConfig, default_config: VigilantConfig) -> VigilantConfig:
+    return {**default_config, **user_config}
 
 
 def create_log_batcher(config: VigilantConfig) -> Batcher[Log]:
@@ -76,3 +87,41 @@ default_config: VigilantConfig = {
     "autocapture": True,
     "noop": False,
 }
+
+_global_instance: Optional[Vigilant] = None
+
+
+def init_vigilant(config: VigilantConfig):
+    """
+    Initialize the global instance with the provided configuration.
+    Automatically shuts down the global instance when the process is terminated.
+    """
+    global _global_instance
+    merged_config = merge_config(config, default_config)
+    _global_instance = Vigilant(merged_config)
+    _global_instance.start()
+    _add_shutdown_listeners()
+
+
+def shutdown_vigilant():
+    """
+    Manually shutdown the global instance and remove the exit listener.
+    """
+    global _global_instance
+    _remove_shutdown_listeners()  # Remove listener first
+    if _global_instance:
+        _global_instance.shutdown()
+        _global_instance = None
+
+
+def _add_shutdown_listeners():
+    """Registers the shutdown handler to be called on program exit."""
+    atexit.register(shutdown_vigilant)
+
+
+def _remove_shutdown_listeners():
+    """Unregisters the shutdown handler."""
+    try:
+        atexit.unregister(shutdown_vigilant)
+    except ValueError:
+        pass
