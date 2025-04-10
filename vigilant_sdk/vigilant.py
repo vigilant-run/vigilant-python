@@ -1,6 +1,8 @@
 from typing import TypedDict
 from vigilant_sdk.batcher import Batcher
 from vigilant_sdk.types import Log
+from vigilant_sdk.passthrough import LogPassthrough
+from vigilant_sdk.router import LogRouter
 
 
 class VigilantConfig(TypedDict):
@@ -28,6 +30,8 @@ class Vigilant:
     noop: bool
 
     log_batcher: Batcher[Log]
+    log_passthrough: LogPassthrough
+    log_router: LogRouter
 
     def __init__(self, config: VigilantConfig):
         self.passthrough = config['passthrough']
@@ -35,11 +39,15 @@ class Vigilant:
         self.noop = config['noop']
 
         self.log_batcher = create_log_batcher(config)
+        self.log_passthrough = LogPassthrough()
+        self.log_router = LogRouter(self.send_log)
 
     def start(self):
         if self.noop:
             return
         self.log_batcher.start()
+        if self.autocapture:
+            self.log_router.enable()
 
     def shutdown(self):
         """
@@ -47,9 +55,18 @@ class Vigilant:
         """
         if self.noop:
             return
+        if self.autocapture:
+            self.log_router.disable()
         self.log_batcher.shutdown()
 
     def send_log(self, log: Log):
+        """
+        Send a log to Vigilant via the batcher.
+        If passthrough, the log will be passed through to stdout or stderr.
+        If noop, the log will not be sent to Vigilant.
+        """
+        if self.passthrough:
+            self.log_passthrough.passthrough(log)
         if self.noop:
             return
         self.log_batcher.add(log)
