@@ -119,7 +119,7 @@ _default_config: VigilantConfig = {
     "token": "generated-token-here",
     "endpoint": "ingress.vigilant.run",
     "insecure": False,
-    "passthrough": False,
+    "passthrough": True,
     "autocapture": True,
     "noop": False,
 }
