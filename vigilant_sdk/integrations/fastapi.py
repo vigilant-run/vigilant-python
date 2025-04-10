@@ -99,11 +99,11 @@ def add_middleware(app: fastapi.FastAPI, config: Optional[MiddlewareConfig] = No
         )
     middleware_config = _merge_middleware_config(config)
 
-    if middleware_config["with_tracing"]:
-        app.middleware("http")(tracing_middleware)
-
     if middleware_config["with_logging"]:
         app.middleware("http")(logging_middleware)
+
+    if middleware_config["with_tracing"]:
+        app.middleware("http")(tracing_middleware)
 
 
 def _format_request_body(request_body_str_raw: str) -> str:
