@@ -2,6 +2,7 @@ import uuid
 import time
 import json
 import functools
+import traceback
 from typing import Optional, TypedDict
 from fastapi.websockets import WebSocketDisconnect
 from vigilant_sdk.attributes import add_attributes_async
@@ -11,6 +12,7 @@ from vigilant_sdk.alerts import create_alert
 try:
     import fastapi
     from fastapi import Request, WebSocket
+    from fastapi.responses import JSONResponse
     _FASTAPI_INSTALLED = True
 except ImportError:
     _FASTAPI_INSTALLED = False
@@ -119,10 +121,18 @@ async def alerting_middleware(request: Request, call_next):
     try:
         return await call_next(request)
     except Exception as e:
-        route_template = request.scope.get("route").path
         create_alert(
-            f"Unhandled exception for route {route_template}")
-        raise e
+            f"Unhandled exception for route {request.scope.get('route').path}",
+            {
+                "error.name": str(type(e).__name__),
+                "error.message": str(e),
+                "error.stack": str(traceback.format_exc()),
+            },
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"message": "An unexpected error occurred."},
+        )
 
 
 def add_http_middleware(app: fastapi.FastAPI, config: Optional[MiddlewareConfig] = None):
@@ -135,6 +145,9 @@ def add_http_middleware(app: fastapi.FastAPI, config: Optional[MiddlewareConfig]
             "Install with: pip install vigilant-sdk[fastapi]"
         )
     middleware_config = _merge_middleware_config(config)
+
+    if middleware_config["with_alerting"]:
+        app.middleware("http")(alerting_middleware)
 
     if middleware_config["with_logging"]:
         app.middleware("http")(logging_middleware)
