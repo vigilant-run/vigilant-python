@@ -11,6 +11,7 @@ class VigilantConfig:
     VigilantConfig is a class used to configure the Vigilant SDK.
     It requires a name and token to be configured properly.
     """
+
     name: str
     token: str
     endpoint: str
@@ -19,7 +20,16 @@ class VigilantConfig:
     autocapture: bool
     noop: bool
 
-    def __init__(self, name: str, token: str, endpoint: str, insecure: bool, passthrough: bool, autocapture: bool, noop: bool):
+    def __init__(
+        self,
+        name: str,
+        token: str,
+        endpoint: str,
+        insecure: bool,
+        passthrough: bool,
+        autocapture: bool,
+        noop: bool,
+    ):
         self.name = name
         self.token = token
         self.endpoint = endpoint
@@ -35,6 +45,7 @@ class Vigilant:
     It can be configured to be a noop, which will prevent it from sending any data to Vigilant.
     It requires a name and token to be configured properly.
     """
+
     passthrough: bool
     autocapture: bool
     noop: bool
@@ -130,8 +141,7 @@ class Vigilant:
 
 def create_log_batcher(config: VigilantConfig) -> LogBatcher:
     return LogBatcher(
-        endpoint=create_formatted_endpoint(
-            config.endpoint, config.insecure),
+        endpoint=create_formatted_endpoint(config.endpoint, config.insecure),
         token=config.token,
         batch_interval_seconds=0.1,
         max_batch_size=1000,
@@ -140,8 +150,7 @@ def create_log_batcher(config: VigilantConfig) -> LogBatcher:
 
 def create_metric_collector(config: VigilantConfig) -> MetricCollector:
     return MetricCollector(
-        endpoint=create_formatted_endpoint(
-            config.endpoint, config.insecure),
+        endpoint=create_formatted_endpoint(config.endpoint, config.insecure),
         token=config.token,
         aggregate_interval_seconds=60,
         batch_interval_seconds=0.1,
@@ -150,7 +159,7 @@ def create_metric_collector(config: VigilantConfig) -> MetricCollector:
 
 def create_formatted_endpoint(endpoint: str, insecure: bool) -> str:
     if insecure:
-        prefix = 'http://'
+        prefix = "http://"
     else:
-        prefix = 'https://'
-    return prefix + endpoint + '/api/message'
+        prefix = "https://"
+    return prefix + endpoint + "/api/message"

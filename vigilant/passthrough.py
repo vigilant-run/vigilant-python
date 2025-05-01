@@ -8,6 +8,7 @@ class Passthrough:
     """
     Passthrough is a class that passthroughs logs to stdout or stderr.
     """
+
     stdout_write: Callable[[str], None]
     stderr_write: Callable[[str], None]
 

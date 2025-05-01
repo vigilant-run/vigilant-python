@@ -28,7 +28,8 @@ class MetricSender:
         self.batch_interval_seconds: float = batch_interval_seconds
 
         self._thread_safe_queue: queue.Queue[Optional[AggregatedMetrics]] = queue.Queue(
-            maxsize=1_000)
+            maxsize=1_000
+        )
         self._background_thread: Optional[threading.Thread] = None
         self._stop_event: threading.Event = threading.Event()
         self._session: Optional[requests.Session] = None
@@ -52,13 +53,12 @@ class MetricSender:
         self._session.headers.update({"Content-Type": "application/json"})
 
         self._background_thread = threading.Thread(
-            target=self._run_background_loop,
-            daemon=True
+            target=self._run_background_loop, daemon=True
         )
         self._background_thread.start()
 
     def stop(self) -> None:
-        """ Shuts down the batcher gracefully. Blocks until finished. """
+        """Shuts down the batcher gracefully. Blocks until finished."""
         if self._background_thread is None or not self._background_thread.is_alive():
             return
 
@@ -91,7 +91,8 @@ class MetricSender:
         while not self._stop_event.is_set():
             time_since_last_send = time.monotonic() - last_send_time
             remaining_time_in_interval = max(
-                0, self.batch_interval_seconds - time_since_last_send)
+                0, self.batch_interval_seconds - time_since_last_send
+            )
             get_timeout = remaining_time_in_interval if not current_metrics else 0.01
 
             try:
@@ -106,7 +107,9 @@ class MetricSender:
                 last_send_time = time.monotonic()
 
             except queue.Empty:
-                if current_metrics and (time.monotonic() - last_send_time >= self.batch_interval_seconds):
+                if current_metrics and (
+                    time.monotonic() - last_send_time >= self.batch_interval_seconds
+                ):
                     self._flush_metrics(current_metrics)
                     current_metrics = None
                     last_send_time = time.monotonic()
@@ -143,32 +146,41 @@ class MetricSender:
             raise e
         except Exception as e:
             raise BatcherInternalServerError(
-                f"Unexpected error sending Vigilant batch: {e}") from e
+                f"Unexpected error sending Vigilant batch: {e}"
+            ) from e
 
-    def _send_metrics(self, metrics: AggregatedMetrics, session: requests.Session) -> None:
+    def _send_metrics(
+        self, metrics: AggregatedMetrics, session: requests.Session
+    ) -> None:
         """Sends a batch of messages using the provided requests session."""
         payload: Dict[str, Any] = {
             "token": self.token,
-            "metrics_counters": [metric.to_json() for metric in metrics.counter_metrics],
+            "metrics_counters": [
+                metric.to_json() for metric in metrics.counter_metrics
+            ],
             "metrics_gauges": [metric.to_json() for metric in metrics.gauge_metrics],
-            "metrics_histograms": [metric.to_json() for metric in metrics.histogram_metrics],
+            "metrics_histograms": [
+                metric.to_json() for metric in metrics.histogram_metrics
+            ],
         }
 
         try:
-            response = session.post(
-                self.endpoint, json=payload, timeout=10)
+            response = session.post(self.endpoint, json=payload, timeout=10)
             response.raise_for_status()
         except requests.exceptions.HTTPError as e:
             if e.response is not None:
                 if e.response.status_code == 401:
                     raise BatcherInvalidTokenError(
-                        "Invalid token (401 Unauthorized)") from e
+                        "Invalid token (401 Unauthorized)"
+                    ) from e
                 else:
                     raise BatcherInternalServerError(
-                        f"Server error ({e.response.status_code}): {e.response.text}") from e
+                        f"Server error ({e.response.status_code}): {e.response.text}"
+                    ) from e
             else:
                 raise BatcherInternalServerError(
-                    f"HTTP error without response: {e}") from e
+                    f"HTTP error without response: {e}"
+                ) from e
         except requests.exceptions.Timeout:
             raise BatcherInternalServerError(
                 f"HTTP request timed out after 10 seconds")

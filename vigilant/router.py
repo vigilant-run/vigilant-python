@@ -7,6 +7,7 @@ class LogRouter:
     """
     LogRouter is a class that re-routes stdout and stderr to the log function.
     """
+
     stdout_write: Callable[[str], None]
     stderr_write: Callable[[str], None]
     _stdout_buffer: str
@@ -30,18 +31,16 @@ class LogRouter:
 
     def _stdout_write(self, message):
         self._stdout_buffer += message
-        if '\n' in self._stdout_buffer:
-            lines = self._stdout_buffer.split('\n')
+        if "\n" in self._stdout_buffer:
+            lines = self._stdout_buffer.split("\n")
             for line in lines[:-1]:
-                self._log_function(
-                    Log(line, LogLevel.INFO, {}))
+                self._log_function(Log(line, LogLevel.INFO, {}))
             self._stdout_buffer = lines[-1]
 
     def _stderr_write(self, message):
         self._stderr_buffer += message
-        if '\n' in self._stderr_buffer:
-            lines = self._stderr_buffer.split('\n')
+        if "\n" in self._stderr_buffer:
+            lines = self._stderr_buffer.split("\n")
             for line in lines[:-1]:
-                self._log_function(
-                    Log(line, LogLevel.ERROR, {}))
+                self._log_function(Log(line, LogLevel.ERROR, {}))
             self._stderr_buffer = lines[-1]

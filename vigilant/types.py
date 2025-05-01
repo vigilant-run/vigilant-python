@@ -35,10 +35,12 @@ class Log:
 
     def to_json(self) -> Dict[str, Any]:
         return {
-            "timestamp": self.timestamp.isoformat(timespec='microseconds').replace('+00:00', 'Z'),
+            "timestamp": self.timestamp.isoformat(timespec="microseconds").replace(
+                "+00:00", "Z"
+            ),
             "body": self.body,
             "level": self.level,
-            "attributes": self.attributes
+            "attributes": self.attributes,
         }
 
 
@@ -56,10 +58,12 @@ class Metric:
 
     def to_json(self) -> Dict[str, Any]:
         return {
-            "timestamp": self.timestamp.isoformat(timespec='microseconds').replace('+00:00', 'Z'),
+            "timestamp": self.timestamp.isoformat(timespec="microseconds").replace(
+                "+00:00", "Z"
+            ),
             "name": self.name,
             "value": self.value,
-            "tags": self.tags
+            "tags": self.tags,
         }
 
 
@@ -69,7 +73,9 @@ class CounterMessage:
     value: float
     tags: Dict[str, str]
 
-    def __init__(self, timestamp: datetime, name: str, value: float, tags: Dict[str, str]):
+    def __init__(
+        self, timestamp: datetime, name: str, value: float, tags: Dict[str, str]
+    ):
         self.timestamp = timestamp
         self.name = name
         self.value = value
@@ -77,10 +83,12 @@ class CounterMessage:
 
     def to_json(self) -> Dict[str, Any]:
         return {
-            "timestamp": self.timestamp.isoformat(timespec='microseconds').replace('+00:00', 'Z'),
+            "timestamp": self.timestamp.isoformat(timespec="microseconds").replace(
+                "+00:00", "Z"
+            ),
             "metric_name": self.name,
             "value": self.value,
-            "tags": self.tags
+            "tags": self.tags,
         }
 
 
@@ -90,7 +98,9 @@ class GaugeMessage:
     value: float
     tags: Dict[str, str]
 
-    def __init__(self, timestamp: datetime, name: str, value: float, tags: Dict[str, str]):
+    def __init__(
+        self, timestamp: datetime, name: str, value: float, tags: Dict[str, str]
+    ):
         self.timestamp = timestamp
         self.name = name
         self.value = value
@@ -98,10 +108,12 @@ class GaugeMessage:
 
     def to_json(self) -> Dict[str, Any]:
         return {
-            "timestamp": self.timestamp.isoformat(timespec='microseconds').replace('+00:00', 'Z'),
+            "timestamp": self.timestamp.isoformat(timespec="microseconds").replace(
+                "+00:00", "Z"
+            ),
             "metric_name": self.name,
             "value": self.value,
-            "tags": self.tags
+            "tags": self.tags,
         }
 
 
@@ -111,7 +123,9 @@ class HistogramMessage:
     values: List[float]
     tags: Dict[str, str]
 
-    def __init__(self, timestamp: datetime, name: str, values: List[float], tags: Dict[str, str]):
+    def __init__(
+        self, timestamp: datetime, name: str, values: List[float], tags: Dict[str, str]
+    ):
         self.timestamp = timestamp
         self.name = name
         self.values = values
@@ -119,10 +133,12 @@ class HistogramMessage:
 
     def to_json(self) -> Dict[str, Any]:
         return {
-            "timestamp": self.timestamp.isoformat(timespec='microseconds').replace('+00:00', 'Z'),
+            "timestamp": self.timestamp.isoformat(timespec="microseconds").replace(
+                "+00:00", "Z"
+            ),
             "metric_name": self.name,
             "values": self.values,
-            "tags": self.tags
+            "tags": self.tags,
         }
 
 
@@ -140,11 +156,54 @@ class AggregatedMetrics:
         return {
             "counter_metrics": [metric.to_json() for metric in self.counter_metrics],
             "gauge_metrics": [metric.to_json() for metric in self.gauge_metrics],
-            "histogram_metrics": [metric.to_json() for metric in self.histogram_metrics]
+            "histogram_metrics": [
+                metric.to_json() for metric in self.histogram_metrics
+            ],
         }
 
 
-class CapturedCounter:
+class CounterEvent:
+    name: str
+    tags: Dict[str, str]
+    value: float
+
+    def __init__(self, name: str, tags: Dict[str, str], value: float):
+        self.name = name
+        self.tags = tags
+        self.value = value
+
+
+class GaugeMode(str, Enum):
+    INC = "inc"
+    DEC = "dec"
+    SET = "set"
+
+
+class GaugeEvent:
+    name: str
+    tags: Dict[str, str]
+    value: float
+    mode: GaugeMode
+
+    def __init__(self, name: str, tags: Dict[str, str], value: float, mode: GaugeMode):
+        self.name = name
+        self.tags = tags
+        self.value = value
+        self.mode = mode
+
+
+class HistogramEvent:
+    name: str
+    tags: Dict[str, str]
+    values: List[float]
+
+    def __init__(self, name: str, tags: Dict[str, str], values: List[float]):
+        self.name = name
+        self.tags = tags
+        self.values = values
+
+
+class CounterSeries:
     name: str
     tags: Dict[str, str]
     value: float
@@ -155,14 +214,10 @@ class CapturedCounter:
         self.value = value
 
     def to_json(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "tags": self.tags,
-            "value": self.value
-        }
+        return {"name": self.name, "tags": self.tags, "value": self.value}
 
 
-class CapturedGauge:
+class GaugeSeries:
     name: str
     tags: Dict[str, str]
     value: float
@@ -173,14 +228,10 @@ class CapturedGauge:
         self.value = value
 
     def to_json(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "tags": self.tags,
-            "value": self.value
-        }
+        return {"name": self.name, "tags": self.tags, "value": self.value}
 
 
-class CapturedHistogram:
+class HistogramSeries:
     name: str
     tags: Dict[str, str]
     values: List[float]
@@ -191,19 +242,4 @@ class CapturedHistogram:
         self.values = values
 
     def to_json(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "tags": self.tags,
-            "values": self.values
-        }
-
-
-class CapturedMetrics:
-    counters: Dict[str, CapturedCounter]
-    gauges: Dict[str, CapturedGauge]
-    histograms: Dict[str, CapturedHistogram]
-
-    def __init__(self):
-        self.counters = {}
-        self.gauges = {}
-        self.histograms = {}
+        return {"name": self.name, "tags": self.tags, "values": self.values}

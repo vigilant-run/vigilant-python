@@ -3,22 +3,44 @@ import time
 import threading
 import queue
 from datetime import datetime, timedelta, timezone
-from vigilant.types import Metric, AggregatedMetrics, CounterMessage, GaugeMessage, HistogramMessage, CapturedMetrics, CapturedCounter, CapturedGauge, CapturedHistogram
+from vigilant.types import (
+    AggregatedMetrics,
+    CounterMessage,
+    GaugeMessage,
+    HistogramMessage,
+    CounterEvent,
+    GaugeEvent,
+    HistogramEvent,
+    CounterSeries,
+    GaugeSeries,
+    HistogramSeries,
+    GaugeMode,
+)
 from vigilant.metric_sender import MetricSender
 
 
 class MetricCollector:
-    def __init__(self, endpoint: str, token: str, aggregate_interval_seconds: int, batch_interval_seconds: float):
+    def __init__(
+        self,
+        endpoint: str,
+        token: str,
+        aggregate_interval_seconds: int,
+        batch_interval_seconds: float,
+    ):
         self.endpoint = endpoint
         self.token = token
         self.aggregate_interval = timedelta(seconds=aggregate_interval_seconds)
-        self.captured_buckets: Dict[datetime, CapturedMetrics] = {}
+
+        self.counter_series: Dict[str, CounterSeries] = {}
+        self.gauge_series: Dict[str, GaugeSeries] = {}
+        self.histogram_series: Dict[str, HistogramSeries] = {}
 
         self.counter_events = queue.Queue(maxsize=1_000)
         self.gauge_events = queue.Queue(maxsize=1_000)
         self.histogram_events = queue.Queue(maxsize=1_000)
 
         self.lock = threading.Lock()
+
         self.stop_event = threading.Event()
         self.worker_threads: List[threading.Thread] = []
         self.ticker_thread: Optional[threading.Thread] = None
@@ -39,8 +61,7 @@ class MetricCollector:
 
         self.metric_sender.start()
 
-        processor = threading.Thread(
-            target=self._process_events, daemon=True)
+        processor = threading.Thread(target=self._process_events, daemon=True)
         self.worker_threads.append(processor)
         processor.start()
 
@@ -76,23 +97,29 @@ class MetricCollector:
 
         self.metric_sender.stop()
 
-    def add_counter(self, metric: Metric):
+    def add_counter(self, event: CounterEvent):
         """Adds a counter metric to the collector's queue."""
         if self.stop_event.is_set():
             return
-        self._put_event(self.counter_events, metric)
+        if self.counter_events.full():
+            return
+        self.counter_events.put(event)
 
-    def add_gauge(self, metric: Metric):
+    def add_gauge(self, event: GaugeEvent):
         """Adds a gauge metric to the collector's queue."""
         if self.stop_event.is_set():
             return
-        self._put_event(self.gauge_events, metric)
+        if self.gauge_events.full():
+            return
+        self.gauge_events.put(event)
 
-    def add_histogram(self, metric: Metric):
+    def add_histogram(self, event: HistogramEvent):
         """Adds a histogram metric to the collector's queue."""
         if self.stop_event.is_set():
             return
-        self._put_event(self.histogram_events, metric)
+        if self.histogram_events.full():
+            return
+        self.histogram_events.put(event)
 
     def _run_ticker(self):
         """Runs the ticker loop."""
@@ -100,7 +127,8 @@ class MetricCollector:
             while not self.stop_event.is_set():
                 now = datetime.now(timezone.utc)
                 current_interval_start = _truncate_datetime(
-                    now, self.aggregate_interval)
+                    now, self.aggregate_interval
+                )
                 next_interval_start = current_interval_start + self.aggregate_interval
                 first_trigger_time = next_interval_start + timedelta(seconds=1)
 
@@ -109,7 +137,10 @@ class MetricCollector:
                 wait_duration_seconds = max(0, wait_duration_seconds)
 
                 self.ticker_timer = threading.Timer(
-                    wait_duration_seconds, self._tick_action, args=[current_interval_start])
+                    wait_duration_seconds,
+                    self._tick_action,
+                    args=[current_interval_start],
+                )
                 self.ticker_timer.start()
                 self.ticker_timer.join()
 
@@ -121,7 +152,9 @@ class MetricCollector:
                     if self.stop_event.is_set():
                         break
                     last_interval_start = _truncate_datetime(
-                        datetime.now(timezone.utc) - self.aggregate_interval, self.aggregate_interval)
+                        datetime.now(timezone.utc) - self.aggregate_interval,
+                        self.aggregate_interval,
+                    )
                     self._tick_action(last_interval_start)
 
         except Exception:
@@ -130,11 +163,11 @@ class MetricCollector:
             if self.ticker_timer and self.ticker_timer.is_alive():
                 self.ticker_timer.cancel()
 
-    def _tick_action(self, interval_to_process: datetime):
+    def _tick_action(self, timestamp: datetime):
         """Sends metrics for the completed interval."""
         if self.stop_event.is_set():
             return
-        self._send_metrics_for_interval(interval_to_process)
+        self._send_metrics_for_interval(timestamp)
 
     def _process_events(self):
         """Reads metric events from queues and updates the buckets."""
@@ -175,75 +208,76 @@ class MetricCollector:
                     pass
 
                 if self.stop_event.is_set():
-                    if self.counter_events.empty() and self.gauge_events.empty() and self.histogram_events.empty():
+                    if (
+                        self.counter_events.empty()
+                        and self.gauge_events.empty()
+                        and self.histogram_events.empty()
+                    ):
                         active = False
 
             except Exception:
                 time.sleep(0.5)
 
-    def _put_event(self, q: queue.Queue, event: Metric):
-        """Helper to put event onto a queue if not stopped."""
-        if self.stop_event.is_set():
-            return
-        try:
-            q.put_nowait(event)
-        except queue.Full:
-            pass
-
-    def _get_bucket(self, timestamp: datetime) -> CapturedMetrics:
-        """Gets or creates the bucket for the given timestamp, protected by lock."""
-        bucket_time = _truncate_datetime(timestamp, self.aggregate_interval)
-        with self.lock:
-            bucket = self.captured_buckets.get(bucket_time)
-            if bucket is None:
-                bucket = CapturedMetrics()
-                self.captured_buckets[bucket_time] = bucket
-            return bucket
-
-    def _process_counter_event(self, event: Metric):
+    def _process_counter_event(self, event: CounterEvent):
         """Processes a queued counter event."""
-        bucket = self._get_bucket(event.timestamp)
         identifier = _generate_metric_identifier(event.name, event.tags)
 
-        counter = bucket.counters.get(identifier)
-        if counter:
-            counter.value += event.value
-        else:
-            bucket.counters[identifier] = CapturedCounter(
-                name=event.name,
-                tags=event.tags,
-                value=event.value,
-            )
+        with self.lock:
+            series = self.counter_series.get(identifier)
+            if series:
+                series.value += event.value
+            else:
+                new_series = CounterSeries(
+                    name=event.name,
+                    tags=event.tags,
+                    value=0,
+                )
+                new_series.value = event.value
+                self.counter_series[identifier] = new_series
 
-    def _process_gauge_event(self, event: Metric):
+    def _process_gauge_event(self, event: GaugeEvent):
         """Processes a queued gauge event."""
-        bucket = self._get_bucket(event.timestamp)
         identifier = _generate_metric_identifier(event.name, event.tags)
 
-        gauge = bucket.gauges.get(identifier)
-        if gauge:
-            gauge.value = event.value
-        else:
-            bucket.gauges[identifier] = CapturedGauge(
-                name=event.name,
-                tags=event.tags,
-                value=event.value,
-            )
+        with self.lock:
+            series = self.gauge_series.get(identifier)
+            if series:
+                if event.mode == GaugeMode.SET:
+                    series.value = event.value
+                elif event.mode == GaugeMode.INC:
+                    series.value += event.value
+                elif event.mode == GaugeMode.DEC:
+                    series.value -= event.value
+            else:
+                new_series = GaugeSeries(
+                    name=event.name,
+                    tags=event.tags,
+                    value=0,
+                )
+                if event.mode == GaugeMode.SET:
+                    new_series.value = event.value
+                elif event.mode == GaugeMode.INC:
+                    new_series.value += event.value
+                elif event.mode == GaugeMode.DEC:
+                    new_series.value -= event.value
+                self.gauge_series[identifier] = new_series
 
-    def _process_histogram_event(self, event: Metric):
+    def _process_histogram_event(self, event: HistogramEvent):
         """Processes a queued histogram event."""
-        bucket = self._get_bucket(event.timestamp)
         identifier = _generate_metric_identifier(event.name, event.tags)
 
-        histogram = bucket.histograms.get(identifier)
-        if histogram:
-            histogram.values.append(event.value)
-        else:
-            bucket.histograms[identifier] = CapturedHistogram(
-                name=event.name,
-                tags=event.tags,
-                values=[event.value],
-            )
+        with self.lock:
+            series = self.histogram_series.get(identifier)
+            if series:
+                series.values.append(event.value)
+            else:
+                new_series = HistogramSeries(
+                    name=event.name,
+                    tags=event.tags,
+                    values=[],
+                )
+                new_series.values.append(event.value)
+                self.histogram_series[identifier] = new_series
 
     def _process_after_shutdown(self):
         """Drains event queues after worker threads have stopped."""
@@ -283,92 +317,70 @@ class MetricCollector:
             except Exception:
                 pass
 
-    def _send_metrics_for_interval(self, interval_start: datetime):
+    def _send_metrics_for_interval(self, timestamp: datetime):
         """Aggregates, sends metrics for the interval, and cleans up."""
-        metrics_to_send: Optional[AggregatedMetrics] = None
-        bucket_to_send: Optional[CapturedMetrics] = None
+        aggregated: Optional[AggregatedMetrics] = None
 
         with self.lock:
-            bucket = self.captured_buckets.get(interval_start)
-            if bucket and (bucket.counters or bucket.gauges or bucket.histograms):
-                bucket_to_send = bucket
-                del self.captured_buckets[interval_start]
+            aggregated = self._aggregate_series(timestamp)
+            self._reset_series()
 
-        if bucket_to_send:
-            metrics_to_send = self._aggregate_captured_metrics(
-                interval_start, bucket_to_send)
-
-        if metrics_to_send and (len(metrics_to_send.counter_metrics) > 0 or len(metrics_to_send.gauge_metrics) > 0 or len(metrics_to_send.histogram_metrics) > 0):
-            self.metric_sender.add(metrics_to_send)
-
-        self._cleanup_old_buckets(interval_start)
-
-    def _cleanup_old_buckets(self, current_interval_just_processed: datetime):
-        """Removes buckets older than the previous interval."""
-        cleanup_threshold = current_interval_just_processed - self.aggregate_interval
-        to_delete = []
-        with self.lock:
-            for ts in self.captured_buckets.keys():
-                if ts < cleanup_threshold:
-                    to_delete.append(ts)
-
-            if to_delete:
-                for ts in to_delete:
-                    del self.captured_buckets[ts]
+        if aggregated:
+            self.metric_sender.add(aggregated)
 
     def _send_after_shutdown(self):
         """Sends all remaining metrics currently held in buckets."""
-        buckets_to_send: Dict[datetime, CapturedMetrics] = {}
+        aggregated: Optional[AggregatedMetrics] = None
 
         with self.lock:
-            buckets_to_send = self.captured_buckets
-            self.captured_buckets = {}
+            now = datetime.now(timezone.utc)
+            timestamp = _truncate_datetime(now, self.aggregate_interval)
+            aggregated = self._aggregate_series(timestamp)
+            self._reset_series()
 
-        timestamps_sorted = sorted(buckets_to_send.keys())
+        if aggregated:
+            self.metric_sender.add(aggregated)
 
-        for timestamp in timestamps_sorted:
-            bucket = buckets_to_send[timestamp]
-            if bucket and (bucket.counters or bucket.gauges or bucket.histograms):
-                aggregated = self._aggregate_captured_metrics(
-                    timestamp, bucket)
-                counter_count = len(aggregated.counter_metrics)
-                gauge_count = len(aggregated.gauge_metrics)
-                histogram_count = len(aggregated.histogram_metrics)
-                if counter_count > 0 or gauge_count > 0 or histogram_count > 0:
-                    self.metric_sender.add(aggregated)
-
-    def _aggregate_captured_metrics(self, timestamp: datetime, captured: CapturedMetrics) -> AggregatedMetrics:
+    def _aggregate_series(self, timestamp: datetime) -> AggregatedMetrics:
         """Transforms captured metrics into the format expected by the sender."""
         aggregated = AggregatedMetrics()
 
-        for counter in captured.counters.values():
-            message = CounterMessage(
-                timestamp,
-                counter.name,
-                counter.value,
-                counter.tags,
-            )
-            aggregated.counter_metrics.append(message)
+        with self.lock:
+            for counter in self.counter_series.values():
+                message = CounterMessage(
+                    timestamp,
+                    counter.name,
+                    counter.value,
+                    counter.tags,
+                )
+                aggregated.counter_metrics.append(message)
 
-        for gauge in captured.gauges.values():
-            message = GaugeMessage(
-                timestamp,
-                gauge.name,
-                gauge.value,
-                gauge.tags,
-            )
-            aggregated.gauge_metrics.append(message)
+            for gauge in self.gauge_series.values():
+                message = GaugeMessage(
+                    timestamp,
+                    gauge.name,
+                    gauge.value,
+                    gauge.tags,
+                )
+                aggregated.gauge_metrics.append(message)
 
-        for histogram in captured.histograms.values():
-            message = HistogramMessage(
-                timestamp,
-                histogram.name,
-                histogram.values,
-                histogram.tags,
-            )
-            aggregated.histogram_metrics.append(message)
+            for histogram in self.histogram_series.values():
+                message = HistogramMessage(
+                    timestamp,
+                    histogram.name,
+                    histogram.values,
+                    histogram.tags,
+                )
+                aggregated.histogram_metrics.append(message)
 
         return aggregated
+
+    def _reset_series(self):
+        """Resets the series for the current interval."""
+        for series in self.counter_series.values():
+            series.value = 0
+        for series in self.histogram_series.values():
+            series.values = []
 
 
 def _truncate_datetime(dt: datetime, interval: timedelta) -> datetime:
@@ -386,6 +398,6 @@ def _generate_metric_identifier(name: str, tags: Optional[Dict[str, str]]) -> st
     """Generates a unique string identifier for a metric based on name and tags."""
     if not tags:
         return name
-    sorted_tags = sorted(tags.items())
-    tag_string = "_".join(f"{k}_{v}" for k, v in sorted_tags)
+    sorted_tags = sorted(tags.keys())
+    tag_string = "_".join(f"{k}_{tags[k]}" for k in sorted_tags)
     return f"{name}_{tag_string}"

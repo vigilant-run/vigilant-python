@@ -33,8 +33,7 @@ def init_vigilant(user_config: Optional[VigilantUserConfig] = None):
                 _add_shutdown_listeners()
                 _shutdown_registered = True
         except Exception as e:
-            raise UnexpectedFailureError(
-                f"Failed to initialize Vigilant: {e}") from e
+            raise UnexpectedFailureError(f"Failed to initialize Vigilant: {e}") from e
         finally:
             _global_instance = temp_instance
 
@@ -97,17 +96,27 @@ def _remove_shutdown_listeners():
         pass
 
 
-def _merge_config(user_config: Optional[VigilantUserConfig], default_config: VigilantConfig) -> VigilantConfig:
+def _merge_config(
+    user_config: Optional[VigilantUserConfig], default_config: VigilantConfig
+) -> VigilantConfig:
     if user_config is None:
         return default_config
 
     return VigilantConfig(
         name=user_config.name,
         token=user_config.token,
-        endpoint=user_config.endpoint if user_config.endpoint is not None else default_config.endpoint,
-        insecure=user_config.insecure if user_config.insecure is not None else default_config.insecure,
-        passthrough=user_config.passthrough if user_config.passthrough is not None else default_config.passthrough,
-        autocapture=user_config.autocapture if user_config.autocapture is not None else default_config.autocapture,
+        endpoint=user_config.endpoint
+        if user_config.endpoint is not None
+        else default_config.endpoint,
+        insecure=user_config.insecure
+        if user_config.insecure is not None
+        else default_config.insecure,
+        passthrough=user_config.passthrough
+        if user_config.passthrough is not None
+        else default_config.passthrough,
+        autocapture=user_config.autocapture
+        if user_config.autocapture is not None
+        else default_config.autocapture,
         noop=user_config.noop if user_config.noop is not None else default_config.noop,
     )
 

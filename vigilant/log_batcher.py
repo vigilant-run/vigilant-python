@@ -31,7 +31,8 @@ class LogBatcher:
 
         queue_capacity = max(10_000, max_batch_size * 10)
         self._thread_safe_queue: queue.Queue[Optional[Log]] = queue.Queue(
-            maxsize=queue_capacity)
+            maxsize=queue_capacity
+        )
         self._background_thread: Optional[threading.Thread] = None
         self._stop_event: threading.Event = threading.Event()
         self._session: Optional[requests.Session] = None
@@ -55,13 +56,12 @@ class LogBatcher:
         self._session.headers.update({"Content-Type": "application/json"})
 
         self._background_thread = threading.Thread(
-            target=self._run_background_loop,
-            daemon=True
+            target=self._run_background_loop, daemon=True
         )
         self._background_thread.start()
 
     def stop(self) -> None:
-        """ Shuts down the batcher gracefully. Blocks until finished. """
+        """Shuts down the batcher gracefully. Blocks until finished."""
         if self._background_thread is None or not self._background_thread.is_alive():
             return
 
@@ -94,12 +94,12 @@ class LogBatcher:
         while not self._stop_event.is_set():
             time_since_last_send = time.monotonic() - last_send_time
             remaining_time_in_interval = max(
-                0, self.batch_interval_seconds - time_since_last_send)
+                0, self.batch_interval_seconds - time_since_last_send
+            )
             get_timeout = remaining_time_in_interval if not current_batch else 0.01
 
             try:
-                item = self._thread_safe_queue.get(
-                    block=True, timeout=get_timeout)
+                item = self._thread_safe_queue.get(block=True, timeout=get_timeout)
 
                 if item is None:
                     break
@@ -113,7 +113,9 @@ class LogBatcher:
                     last_send_time = time.monotonic()
 
             except queue.Empty:
-                if current_batch and (time.monotonic() - last_send_time >= self.batch_interval_seconds):
+                if current_batch and (
+                    time.monotonic() - last_send_time >= self.batch_interval_seconds
+                ):
                     self._flush_batch(current_batch)
                     current_batch = []
                     last_send_time = time.monotonic()
@@ -151,36 +153,36 @@ class LogBatcher:
             raise e
         except Exception as e:
             raise BatcherInternalServerError(
-                f"Unexpected error sending Vigilant batch: {e}") from e
+                f"Unexpected error sending Vigilant batch: {e}"
+            ) from e
 
     def _send_batch(self, batch: List[Log], session: requests.Session) -> None:
         """Sends a batch of messages using the provided requests session."""
         payload: Dict[str, Any] = {
             "token": self.token,
-            "logs": [log.to_json() for log in batch]
+            "logs": [log.to_json() for log in batch],
         }
 
         try:
-            response = session.post(
-                self.endpoint, json=payload, timeout=10)
+            response = session.post(self.endpoint, json=payload, timeout=10)
             response.raise_for_status()
         except requests.exceptions.HTTPError as e:
             if e.response is not None:
                 if e.response.status_code == 401:
                     raise BatcherInvalidTokenError(
-                        "Invalid token (401 Unauthorized)") from e
+                        "Invalid token (401 Unauthorized)"
+                    ) from e
                 else:
                     raise BatcherInternalServerError(
-                        f"Server error ({e.response.status_code}): {e.response.text}") from e
+                        f"Server error ({e.response.status_code}): {e.response.text}"
+                    ) from e
             else:
                 raise BatcherInternalServerError(
-                    f"HTTP error without response: {e}") from e
+                    f"HTTP error without response: {e}"
+                ) from e
         except requests.exceptions.Timeout:
-            raise BatcherInternalServerError(
-                f"HTTP request timed out after 10 seconds")
+            raise BatcherInternalServerError(f"HTTP request timed out after 10 seconds")
         except requests.exceptions.ConnectionError as e:
-            raise BatcherInternalServerError(
-                f"HTTP connection failed: {e}") from e
+            raise BatcherInternalServerError(f"HTTP connection failed: {e}") from e
         except requests.exceptions.RequestException as e:
-            raise BatcherInternalServerError(
-                f"HTTP request failed: {e}") from e
+            raise BatcherInternalServerError(f"HTTP request failed: {e}") from e

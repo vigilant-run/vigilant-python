@@ -7,6 +7,7 @@ class VigilantUserConfig:
 
     `name` and `token` are required, the other fields are optional.
     """
+
     name: str
     token: str
     endpoint: Optional[str]
@@ -15,7 +16,16 @@ class VigilantUserConfig:
     autocapture: Optional[bool]
     noop: Optional[bool]
 
-    def __init__(self, name: str, token: str, endpoint: Optional[str] = None, insecure: Optional[bool] = None, passthrough: Optional[bool] = None, autocapture: Optional[bool] = None, noop: Optional[bool] = None):
+    def __init__(
+        self,
+        name: str,
+        token: str,
+        endpoint: Optional[str] = None,
+        insecure: Optional[bool] = None,
+        passthrough: Optional[bool] = None,
+        autocapture: Optional[bool] = None,
+        noop: Optional[bool] = None,
+    ):
         self.name = name
         self.token = token
         self.endpoint = endpoint

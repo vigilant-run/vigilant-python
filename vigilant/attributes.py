@@ -2,10 +2,13 @@ import contextvars
 from typing import Callable, Dict, Any, Optional, Awaitable
 
 _STORED_ATTRIBUTES: contextvars.ContextVar[Dict[str, Any]] = contextvars.ContextVar(
-    "_STORED_ATTRIBUTES", default={})
+    "_STORED_ATTRIBUTES", default={}
+)
 
 
-def add_attributes(attributes: Dict[str, str], callback: Optional[Callable[[], Any]] = None) -> Any:
+def add_attributes(
+    attributes: Dict[str, str], callback: Optional[Callable[[], Any]] = None
+) -> Any:
     """
     Adds or overwrites attributes in the current context, then
     executes the callback if provided, returning the callback's result.
@@ -24,7 +27,9 @@ def add_attributes(attributes: Dict[str, str], callback: Optional[Callable[[], A
     return ret
 
 
-async def add_attributes_async(attributes: Dict[str, str], callback: Optional[Callable[[], Awaitable[Any]]] = None) -> Any:
+async def add_attributes_async(
+    attributes: Dict[str, str], callback: Optional[Callable[[], Awaitable[Any]]] = None
+) -> Any:
     """
     Asynchronously adds or overwrites attributes in the current context,
     then executes the callback if provided, returning the callback's result.
@@ -54,6 +59,7 @@ class AttributeProvider:
     """
     AttributeProvider is a class that provides attributes to the current context.
     """
+
     name: str
 
     def __init__(self, name: str):
@@ -63,7 +69,7 @@ class AttributeProvider:
         current_attributes = get_attributes()
         merged_attributes = attributes.copy()
         merged_attributes.update(current_attributes)
-        merged_attributes['service'] = self.name
+        merged_attributes["service"] = self.name
         filtered_attributes = {
             k: v
             for k, v in merged_attributes.items()

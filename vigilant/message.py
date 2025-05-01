@@ -1,10 +1,12 @@
 class VigilantError(Exception):
     """Base exception for Vigilant errors."""
+
     pass
 
 
 class FormattedVigilantError(VigilantError):
     """Base class for Vigilant errors with specific formatting."""
+
     error_header = "[ **** Vigilant Error **** ]"
 
     def __init__(self, message: str):
