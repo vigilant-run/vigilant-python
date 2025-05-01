@@ -1,8 +1,7 @@
 from typing import Dict
 from vigilant.message import NotInitializedError
 from vigilant.instance import get_global_instance
-from vigilant.utils import get_current_timestamp
-from vigilant.types import Metric
+from vigilant.types import CounterEvent, GaugeEvent, HistogramEvent, GaugeMode
 
 
 def metric_counter(name: str, value: float, tags: Dict[str, str] = {}):
@@ -18,11 +17,12 @@ def metric_counter(name: str, value: float, tags: Dict[str, str] = {}):
     if global_instance is None:
         raise NotInitializedError()
 
-    metric = Metric(name, value, tags)
+    metric = CounterEvent(name, value, tags)
+
     global_instance.send_counter(metric)
 
 
-def metric_gauge(name: str, value: float, tags: Dict[str, str] = {}):
+def metric_gauge(name: str, value: float, mode: GaugeMode = GaugeMode.SET, tags: Dict[str, str] = {}):
     """
     Creates a gauge metric.
 
@@ -35,7 +35,8 @@ def metric_gauge(name: str, value: float, tags: Dict[str, str] = {}):
     if global_instance is None:
         raise NotInitializedError()
 
-    metric = Metric(name, value, tags)
+    metric = GaugeEvent(name, value, mode, tags)
+
     global_instance.send_gauge(metric)
 
 
@@ -52,6 +53,6 @@ def metric_histogram(name: str, value: float, tags: Dict[str, str] = {}):
     if global_instance is None:
         raise NotInitializedError()
 
-    metric = Metric(name, value, tags)
+    metric = HistogramEvent(name, value, tags)
 
     global_instance.send_histogram(metric)

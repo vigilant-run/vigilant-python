@@ -1,5 +1,5 @@
 from vigilant.log_batcher import LogBatcher
-from vigilant.types import Log, Metric
+from vigilant.types import Log, CounterEvent, GaugeEvent, HistogramEvent
 from vigilant.passthrough import Passthrough
 from vigilant.router import LogRouter
 from vigilant.attributes import AttributeProvider
@@ -105,7 +105,7 @@ class Vigilant:
 
         self.log_batcher.add(log)
 
-    def send_counter(self, metric: Metric):
+    def send_counter(self, metric: CounterEvent):
         """
         Send a counter to Vigilant via the batcher.
         If passthrough, the counter will be passed through to stdout or stderr.
@@ -116,7 +116,7 @@ class Vigilant:
 
         self.metric_collector.add_counter(metric)
 
-    def send_gauge(self, metric: Metric):
+    def send_gauge(self, metric: GaugeEvent):
         """
         Send a gauge to Vigilant via the batcher.
         If passthrough, the gauge will be passed through to stdout or stderr.
@@ -127,7 +127,7 @@ class Vigilant:
 
         self.metric_collector.add_gauge(metric)
 
-    def send_histogram(self, metric: Metric):
+    def send_histogram(self, metric: HistogramEvent):
         """
         Send a histogram to Vigilant via the batcher.
         If passthrough, the histogram will be passed through to stdout or stderr.

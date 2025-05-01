@@ -135,8 +135,6 @@ class MetricSender:
 
     def _flush_metrics(self, metrics: AggregatedMetrics) -> None:
         """Flushes the provided batch using the requests session."""
-        if not metrics:
-            return
         if not self._session:
             return
 
@@ -163,6 +161,8 @@ class MetricSender:
                 metric.to_json() for metric in metrics.histogram_metrics
             ],
         }
+
+        print(f"Sending metrics: {payload}")
 
         try:
             response = session.post(self.endpoint, json=payload, timeout=10)
