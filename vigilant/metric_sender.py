@@ -154,9 +154,6 @@ class MetricSender:
             "metrics_histograms": [metric.to_json() for metric in metrics.histogram_metrics],
         }
 
-        print("MetricSender: _send_metrics: payload",
-              payload)
-
         try:
             response = session.post(
                 self.endpoint, json=payload, timeout=10)

@@ -134,8 +134,6 @@ class MetricCollector:
         """Sends metrics for the completed interval."""
         if self.stop_event.is_set():
             return
-        print("MetricCollector: _tick_action: sending metrics for interval",
-              interval_to_process)
         self._send_metrics_for_interval(interval_to_process)
 
     def _process_events(self):
@@ -145,8 +143,6 @@ class MetricCollector:
             try:
                 try:
                     event = self.counter_events.get(timeout=0.1)
-                    print("MetricCollector: _process_events: event",
-                          event)
                     if event is None:
                         active = False
                         continue
@@ -182,9 +178,7 @@ class MetricCollector:
                     if self.counter_events.empty() and self.gauge_events.empty() and self.histogram_events.empty():
                         active = False
 
-            except Exception as e:
-                print("MetricCollector: _process_events: error",
-                      e)
+            except Exception:
                 time.sleep(0.5)
 
     def _put_event(self, q: queue.Queue, event: Metric):
@@ -210,11 +204,6 @@ class MetricCollector:
         """Processes a queued counter event."""
         bucket = self._get_bucket(event.timestamp)
         identifier = _generate_metric_identifier(event.name, event.tags)
-
-        print("MetricCollector: _process_counter_event: bucket",
-              bucket)
-        print("MetricCollector: _process_counter_event: identifier",
-              identifier)
 
         counter = bucket.counters.get(identifier)
         if counter:

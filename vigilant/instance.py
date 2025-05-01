@@ -80,9 +80,8 @@ def _shutdown_sync():
             return
         try:
             instance_to_shutdown.shutdown()
-        except Exception as e:
-            print(
-                f"Error during Vigilant atexit shutdown: {e}", file=sys.stderr)
+        except Exception:
+            pass
 
 
 def _add_shutdown_listeners():
@@ -94,11 +93,8 @@ def _remove_shutdown_listeners():
     """Unregisters the shutdown handler."""
     try:
         atexit.unregister(_shutdown_sync)
-    except ValueError:
+    except Exception:
         pass
-    except Exception as e:
-        print(
-            f"Error unregistering Vigilant shutdown handler: {e}", file=sys.stderr)
 
 
 def _merge_config(user_config: Optional[VigilantUserConfig], default_config: VigilantConfig) -> VigilantConfig:
