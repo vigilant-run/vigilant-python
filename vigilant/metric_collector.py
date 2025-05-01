@@ -99,6 +99,7 @@ class MetricCollector:
 
     def add_counter(self, event: CounterEvent):
         """Adds a counter metric to the collector's queue."""
+        print(f"Adding counter event: {event}")
         if self.stop_event.is_set():
             return
         if self.counter_events.full():
@@ -107,6 +108,7 @@ class MetricCollector:
 
     def add_gauge(self, event: GaugeEvent):
         """Adds a gauge metric to the collector's queue."""
+        print(f"Adding gauge event: {event}")
         if self.stop_event.is_set():
             return
         if self.gauge_events.full():
@@ -115,6 +117,7 @@ class MetricCollector:
 
     def add_histogram(self, event: HistogramEvent):
         """Adds a histogram metric to the collector's queue."""
+        print(f"Adding histogram event: {event}")
         if self.stop_event.is_set():
             return
         if self.histogram_events.full():
@@ -125,16 +128,19 @@ class MetricCollector:
         """Runs the ticker loop."""
         try:
             while not self.stop_event.is_set():
+                print("Running ticker")
                 now = datetime.now(timezone.utc)
                 current_interval_start = _truncate_datetime(
                     now, self.aggregate_interval
                 )
-                next_interval_start = current_interval_start + self.aggregate_interval
-                first_trigger_time = next_interval_start + timedelta(seconds=1)
+                next_start = current_interval_start + self.aggregate_interval
+                first_time = next_start + timedelta(milliseconds=50)
+                print(f"First time: {first_time}")
 
                 wait_duration_seconds = (
-                    first_trigger_time - now).total_seconds()
+                    first_time - now).total_seconds()
                 wait_duration_seconds = max(0, wait_duration_seconds)
+                print(f"Waiting for {wait_duration_seconds} seconds")
 
                 self.ticker_timer = threading.Timer(
                     wait_duration_seconds,
@@ -142,13 +148,17 @@ class MetricCollector:
                     args=[current_interval_start],
                 )
                 self.ticker_timer.start()
+                print("Ticker timer started")
                 self.ticker_timer.join()
+                print("Ticker timer joined")
 
                 if self.stop_event.is_set():
                     break
 
                 interval_seconds = self.aggregate_interval.total_seconds()
+                print(f"Waiting for {interval_seconds} seconds")
                 while not self.stop_event.wait(interval_seconds):
+                    print("Waiting for stop event")
                     if self.stop_event.is_set():
                         break
                     last_interval_start = _truncate_datetime(
@@ -157,7 +167,8 @@ class MetricCollector:
                     )
                     self._tick_action(last_interval_start)
 
-        except Exception:
+        except Exception as e:
+            print(f"Ticker exception: {e}")
             pass
         finally:
             if self.ticker_timer and self.ticker_timer.is_alive():
@@ -165,6 +176,7 @@ class MetricCollector:
 
     def _tick_action(self, timestamp: datetime):
         """Sends metrics for the completed interval."""
+        print(f"Ticking action: {timestamp}")
         if self.stop_event.is_set():
             return
         self._send_metrics_for_interval(timestamp)
@@ -223,6 +235,7 @@ class MetricCollector:
         identifier = _generate_metric_identifier(event.name, event.tags)
 
         with self.lock:
+            print(f"Processing counter event: {event}")
             series = self.counter_series.get(identifier)
             if series:
                 series.value += event.value
@@ -240,6 +253,7 @@ class MetricCollector:
         identifier = _generate_metric_identifier(event.name, event.tags)
 
         with self.lock:
+            print(f"Processing gauge event: {event}")
             series = self.gauge_series.get(identifier)
             if series:
                 if event.mode == GaugeMode.SET:
@@ -267,6 +281,7 @@ class MetricCollector:
         identifier = _generate_metric_identifier(event.name, event.tags)
 
         with self.lock:
+            print(f"Processing histogram event: {event}")
             series = self.histogram_series.get(identifier)
             if series:
                 series.values.append(event.value)
@@ -319,14 +334,17 @@ class MetricCollector:
 
     def _send_metrics_for_interval(self, timestamp: datetime):
         """Aggregates, sends metrics for the interval, and cleans up."""
+        print(f"Sending metrics for interval: {timestamp}")
         aggregated: Optional[AggregatedMetrics] = None
 
         with self.lock:
-            aggregated = self._aggregate_series(timestamp)
+            aggregated = self._aggregate_series_with_lock(timestamp)
             self._reset_series()
 
         if aggregated:
+            print(f"Attempting to send metrics: {aggregated}")
             self.metric_sender.add(aggregated)
+            print(f"Finished sending metrics: {aggregated}")
 
     def _send_after_shutdown(self):
         """Sends all remaining metrics currently held in buckets."""
@@ -335,43 +353,42 @@ class MetricCollector:
         with self.lock:
             now = datetime.now(timezone.utc)
             timestamp = _truncate_datetime(now, self.aggregate_interval)
-            aggregated = self._aggregate_series(timestamp)
+            aggregated = self._aggregate_series_with_lock(timestamp)
             self._reset_series()
 
         if aggregated:
             self.metric_sender.add(aggregated)
 
-    def _aggregate_series(self, timestamp: datetime) -> AggregatedMetrics:
-        """Transforms captured metrics into the format expected by the sender."""
+    def _aggregate_series_with_lock(self, timestamp: datetime) -> AggregatedMetrics:
+        """Transforms captured metrics into the format expected by the sender. This expects the lock to be held."""
         aggregated = AggregatedMetrics()
 
-        with self.lock:
-            for counter in self.counter_series.values():
-                message = CounterMessage(
-                    timestamp,
-                    counter.name,
-                    counter.value,
-                    counter.tags,
-                )
-                aggregated.counter_metrics.append(message)
+        for counter in self.counter_series.values():
+            message = CounterMessage(
+                timestamp,
+                counter.name,
+                counter.value,
+                counter.tags,
+            )
+            aggregated.counter_metrics.append(message)
 
-            for gauge in self.gauge_series.values():
-                message = GaugeMessage(
-                    timestamp,
-                    gauge.name,
-                    gauge.value,
-                    gauge.tags,
-                )
-                aggregated.gauge_metrics.append(message)
+        for gauge in self.gauge_series.values():
+            message = GaugeMessage(
+                timestamp,
+                gauge.name,
+                gauge.value,
+                gauge.tags,
+            )
+            aggregated.gauge_metrics.append(message)
 
-            for histogram in self.histogram_series.values():
-                message = HistogramMessage(
-                    timestamp,
-                    histogram.name,
-                    histogram.values,
-                    histogram.tags,
-                )
-                aggregated.histogram_metrics.append(message)
+        for histogram in self.histogram_series.values():
+            message = HistogramMessage(
+                timestamp,
+                histogram.name,
+                histogram.values,
+                histogram.tags,
+            )
+            aggregated.histogram_metrics.append(message)
 
         return aggregated
 

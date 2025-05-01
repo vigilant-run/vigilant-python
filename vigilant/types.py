@@ -44,27 +44,45 @@ class Log:
         }
 
 
-class Metric:
-    timestamp: datetime
+class CounterEvent:
     name: str
     value: float
     tags: Dict[str, str]
 
     def __init__(self, name: str, value: float, tags: Dict[str, str]):
-        self.timestamp = get_current_timestamp()
         self.name = name
-        self.value = value
         self.tags = tags
+        self.value = value
 
-    def to_json(self) -> Dict[str, Any]:
-        return {
-            "timestamp": self.timestamp.isoformat(timespec="microseconds").replace(
-                "+00:00", "Z"
-            ),
-            "name": self.name,
-            "value": self.value,
-            "tags": self.tags,
-        }
+
+class GaugeMode(str, Enum):
+    INC = "inc"
+    DEC = "dec"
+    SET = "set"
+
+
+class GaugeEvent:
+    name: str
+    value: float
+    mode: GaugeMode
+    tags: Dict[str, str]
+
+    def __init__(self, name: str, value: float, mode: GaugeMode, tags: Dict[str, str]):
+        self.name = name
+        self.tags = tags
+        self.value = value
+        self.mode = mode
+
+
+class HistogramEvent:
+    name: str
+    tags: Dict[str, str]
+    value: float
+
+    def __init__(self, name: str, value: float, tags: Dict[str, str]):
+        self.name = name
+        self.tags = tags
+        self.value = value
 
 
 class CounterMessage:
@@ -160,47 +178,6 @@ class AggregatedMetrics:
                 metric.to_json() for metric in self.histogram_metrics
             ],
         }
-
-
-class CounterEvent:
-    name: str
-    tags: Dict[str, str]
-    value: float
-
-    def __init__(self, name: str, tags: Dict[str, str], value: float):
-        self.name = name
-        self.tags = tags
-        self.value = value
-
-
-class GaugeMode(str, Enum):
-    INC = "inc"
-    DEC = "dec"
-    SET = "set"
-
-
-class GaugeEvent:
-    name: str
-    tags: Dict[str, str]
-    value: float
-    mode: GaugeMode
-
-    def __init__(self, name: str, tags: Dict[str, str], value: float, mode: GaugeMode):
-        self.name = name
-        self.tags = tags
-        self.value = value
-        self.mode = mode
-
-
-class HistogramEvent:
-    name: str
-    tags: Dict[str, str]
-    values: List[float]
-
-    def __init__(self, name: str, tags: Dict[str, str], values: List[float]):
-        self.name = name
-        self.tags = tags
-        self.values = values
 
 
 class CounterSeries:
