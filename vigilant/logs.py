@@ -1,13 +1,12 @@
 from typing import Dict
 from vigilant.message import NotInitializedError
-from vigilant.types import LogLevel
+from vigilant.types import LogLevel, Log
 from vigilant.instance import get_global_instance
-from vigilant.utils import create_log_instance
 
 
 def log_info(message: str, attributes: Dict[str, str] = {}):
     """
-    Log an info message.
+    Logs an info message.
 
     Args:
         message (str): The message to log.
@@ -20,14 +19,14 @@ def log_info(message: str, attributes: Dict[str, str] = {}):
     if global_instance is None:
         raise NotInitializedError()
 
-    log = create_log_instance(message, LogLevel.INFO, attributes)
+    log = Log(message, LogLevel.INFO, attributes)
 
     global_instance.send_log(log)
 
 
 def log_error(message: str, attributes: Dict[str, str] = {}):
     """
-    Log an error message.
+    Logs an error message.
 
     Args:
         message (str): The message to log.
@@ -40,14 +39,14 @@ def log_error(message: str, attributes: Dict[str, str] = {}):
     if global_instance is None:
         raise NotInitializedError()
 
-    log = create_log_instance(message, LogLevel.ERROR, attributes)
+    log = Log(message, LogLevel.ERROR, attributes)
 
     global_instance.send_log(log)
 
 
 def log_warn(message: str, attributes: Dict[str, str] = {}):
     """
-    Log a warning message.
+    Logs a warning message.
 
     Args:
         message (str): The message to log.
@@ -60,14 +59,14 @@ def log_warn(message: str, attributes: Dict[str, str] = {}):
     if global_instance is None:
         raise NotInitializedError()
 
-    log = create_log_instance(message, LogLevel.WARN, attributes)
+    log = Log(message, LogLevel.WARN, attributes)
 
     global_instance.send_log(log)
 
 
 def log_debug(message: str, attributes: Dict[str, str] = {}):
     """
-    Log a debug message.
+    Logs a debug message.
 
     Args:
         message (str): The message to log.
@@ -80,14 +79,14 @@ def log_debug(message: str, attributes: Dict[str, str] = {}):
     if global_instance is None:
         raise NotInitializedError()
 
-    log = create_log_instance(message, LogLevel.DEBUG, attributes)
+    log = Log(message, LogLevel.DEBUG, attributes)
 
     global_instance.send_log(log)
 
 
 def log_trace(message: str, attributes: Dict[str, str] = {}):
     """
-    Log a trace message.
+    Logs a trace message.
 
     Args:
         message (str): The message to log.
@@ -100,6 +99,6 @@ def log_trace(message: str, attributes: Dict[str, str] = {}):
     if global_instance is None:
         raise NotInitializedError()
 
-    log = create_log_instance(message, LogLevel.TRACE, attributes)
+    log = Log(message, LogLevel.TRACE, attributes)
 
     global_instance.send_log(log)

@@ -33,11 +33,6 @@ def init_vigilant(user_config: Optional[VigilantUserConfig] = None):
                 _add_shutdown_listeners()
                 _shutdown_registered = True
         except Exception as e:
-            if hasattr(instance, 'log_batcher') and instance.log_batcher:
-                try:
-                    instance.log_batcher.shutdown()
-                except Exception:
-                    pass
             raise UnexpectedFailureError(
                 f"Failed to initialize Vigilant: {e}") from e
         finally:
@@ -107,19 +102,26 @@ def _remove_shutdown_listeners():
 
 
 def _merge_config(user_config: Optional[VigilantUserConfig], default_config: VigilantConfig) -> VigilantConfig:
-    user_config_dict = user_config or {}
-    merged_dict = {**default_config, **user_config_dict}
-    final_config = {k: merged_dict[k]
-                    for k in VigilantConfig.__annotations__ if k in merged_dict}
-    return final_config
+    if user_config is None:
+        return default_config
+
+    return VigilantConfig(
+        name=user_config.name,
+        token=user_config.token,
+        endpoint=user_config.endpoint if user_config.endpoint is not None else default_config.endpoint,
+        insecure=user_config.insecure if user_config.insecure is not None else default_config.insecure,
+        passthrough=user_config.passthrough if user_config.passthrough is not None else default_config.passthrough,
+        autocapture=user_config.autocapture if user_config.autocapture is not None else default_config.autocapture,
+        noop=user_config.noop if user_config.noop is not None else default_config.noop,
+    )
 
 
-_default_config: VigilantConfig = {
-    "name": "backend",
-    "token": "generated-token-here",
-    "endpoint": "ingress.vigilant.run",
-    "insecure": False,
-    "passthrough": True,
-    "autocapture": True,
-    "noop": False,
-}
+_default_config: VigilantConfig = VigilantConfig(
+    name="backend",
+    token="generated-token-here",
+    endpoint="ingress.vigilant.run",
+    insecure=False,
+    passthrough=True,
+    autocapture=True,
+    noop=False,
+)

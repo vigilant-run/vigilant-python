@@ -2,8 +2,8 @@ import threading
 import queue
 import time
 import requests
-from typing import List, Optional, Dict, Any
-from vigilant.types import Log
+from typing import Optional, Dict, Any
+from vigilant.types import AggregatedMetrics
 from vigilant.message import (
     VigilantError,
     BatcherInvalidTokenError,
@@ -11,9 +11,9 @@ from vigilant.message import (
 )
 
 
-class LogBatcher:
+class MetricSender:
     """
-    A class used to batch and send event batches synchronously in a background thread
+    A class used to batch and send metric batches synchronously in a background thread
     using the requests library.
     """
 
@@ -22,21 +22,18 @@ class LogBatcher:
         endpoint: str,
         token: str,
         batch_interval_seconds: float,
-        max_batch_size: int,
     ):
         self.endpoint: str = endpoint
         self.token: str = token
         self.batch_interval_seconds: float = batch_interval_seconds
-        self.max_batch_size: int = max_batch_size
 
-        queue_capacity = max(10_000, max_batch_size * 10)
-        self._thread_safe_queue: queue.Queue[Optional[Log]] = queue.Queue(
-            maxsize=queue_capacity)
+        self._thread_safe_queue: queue.Queue[Optional[AggregatedMetrics]] = queue.Queue(
+            maxsize=1_000)
         self._background_thread: Optional[threading.Thread] = None
         self._stop_event: threading.Event = threading.Event()
         self._session: Optional[requests.Session] = None
 
-    def add(self, item: Log) -> None:
+    def add(self, item: AggregatedMetrics) -> None:
         """Adds an item to the thread-safe queue for processing by the background thread."""
         if self._stop_event.is_set() or self._background_thread is None:
             return
@@ -88,14 +85,14 @@ class LogBatcher:
 
     def _run_background_loop(self) -> None:
         """Target function for the background thread. Runs the batching loop."""
-        current_batch: List[Log] = []
+        current_metrics: Optional[AggregatedMetrics] = None
         last_send_time = time.monotonic()
 
         while not self._stop_event.is_set():
             time_since_last_send = time.monotonic() - last_send_time
             remaining_time_in_interval = max(
                 0, self.batch_interval_seconds - time_since_last_send)
-            get_timeout = remaining_time_in_interval if not current_batch else 0.01
+            get_timeout = remaining_time_in_interval if not current_metrics else 0.01
 
             try:
                 item = self._thread_safe_queue.get(
@@ -104,20 +101,16 @@ class LogBatcher:
                 if item is None:
                     break
 
-                current_batch.append(item)
+                current_metrics = item
                 self._thread_safe_queue.task_done()
-
-                if len(current_batch) >= self.max_batch_size:
-                    self._flush_batch(current_batch)
-                    current_batch = []
-                    last_send_time = time.monotonic()
+                last_send_time = time.monotonic()
 
             except queue.Empty:
-                if current_batch and (time.monotonic() - last_send_time >= self.batch_interval_seconds):
-                    self._flush_batch(current_batch)
-                    current_batch = []
+                if current_metrics and (time.monotonic() - last_send_time >= self.batch_interval_seconds):
+                    self._flush_metrics(current_metrics)
+                    current_metrics = None
                     last_send_time = time.monotonic()
-            except Exception as e:
+            except Exception:
                 pass
                 time.sleep(1)
 
@@ -127,38 +120,42 @@ class LogBatcher:
                 if item is None:
                     self._thread_safe_queue.task_done()
                     continue
-                current_batch.append(item)
+                current_metrics = item
                 self._thread_safe_queue.task_done()
-                if len(current_batch) >= self.max_batch_size:
-                    self._flush_batch(current_batch)
-                    current_batch = []
+                self._flush_metrics(current_metrics)
+                current_metrics = None
             except queue.Empty:
                 break
 
-        if current_batch:
-            self._flush_batch(current_batch)
+        if current_metrics:
+            self._flush_metrics(current_metrics)
 
-    def _flush_batch(self, batch: List[Log]) -> None:
+    def _flush_metrics(self, metrics: AggregatedMetrics) -> None:
         """Flushes the provided batch using the requests session."""
-        if not batch:
+        if not metrics:
             return
         if not self._session:
             return
 
         try:
-            self._send_batch(batch, self._session)
+            self._send_metrics(metrics, self._session)
         except VigilantError as e:
             raise e
         except Exception as e:
             raise BatcherInternalServerError(
                 f"Unexpected error sending Vigilant batch: {e}") from e
 
-    def _send_batch(self, batch: List[Log], session: requests.Session) -> None:
+    def _send_metrics(self, metrics: AggregatedMetrics, session: requests.Session) -> None:
         """Sends a batch of messages using the provided requests session."""
         payload: Dict[str, Any] = {
             "token": self.token,
-            "logs": [log.to_json() for log in batch]
+            "metrics_counters": [metric.to_json() for metric in metrics.counter_metrics],
+            "metrics_gauges": [metric.to_json() for metric in metrics.gauge_metrics],
+            "metrics_histograms": [metric.to_json() for metric in metrics.histogram_metrics],
         }
+
+        print("MetricSender: _send_metrics: payload",
+              payload)
 
         try:
             response = session.post(

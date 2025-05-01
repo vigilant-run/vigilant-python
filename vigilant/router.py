@@ -1,7 +1,6 @@
 import sys
 from typing import Callable
 from vigilant.types import LogLevel, Log
-from vigilant.utils import create_log_instance
 
 
 class LogRouter:
@@ -35,7 +34,7 @@ class LogRouter:
             lines = self._stdout_buffer.split('\n')
             for line in lines[:-1]:
                 self._log_function(
-                    create_log_instance(line, LogLevel.INFO, {}))
+                    Log(line, LogLevel.INFO, {}))
             self._stdout_buffer = lines[-1]
 
     def _stderr_write(self, message):
@@ -44,5 +43,5 @@ class LogRouter:
             lines = self._stderr_buffer.split('\n')
             for line in lines[:-1]:
                 self._log_function(
-                    create_log_instance(line, LogLevel.ERROR, {}))
+                    Log(line, LogLevel.ERROR, {}))
             self._stderr_buffer = lines[-1]

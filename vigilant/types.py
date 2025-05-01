@@ -1,5 +1,7 @@
 from enum import Enum
-from typing import TypedDict, Dict
+from typing import Dict, List, Any
+from datetime import datetime
+from vigilant.utils import get_current_timestamp
 
 
 class LogLevel(str, Enum):
@@ -10,11 +12,17 @@ class LogLevel(str, Enum):
     TRACE = "TRACE"
 
 
-class Log(TypedDict):
-    timestamp: str
+class Log:
+    timestamp: datetime
     body: str
     level: LogLevel
     attributes: Dict[str, str]
+
+    def __init__(self, body: str, level: LogLevel, attributes: Dict[str, str]):
+        self.timestamp = get_current_timestamp()
+        self.body = body
+        self.level = level
+        self.attributes = attributes
 
     def __str__(self) -> str:
         attributes_str = ""
@@ -24,3 +32,178 @@ class Log(TypedDict):
 
     def to_string(self) -> str:
         return self.__str__()
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            "timestamp": self.timestamp.isoformat(timespec='microseconds').replace('+00:00', 'Z'),
+            "body": self.body,
+            "level": self.level,
+            "attributes": self.attributes
+        }
+
+
+class Metric:
+    timestamp: datetime
+    name: str
+    value: float
+    tags: Dict[str, str]
+
+    def __init__(self, name: str, value: float, tags: Dict[str, str]):
+        self.timestamp = get_current_timestamp()
+        self.name = name
+        self.value = value
+        self.tags = tags
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            "timestamp": self.timestamp.isoformat(timespec='microseconds').replace('+00:00', 'Z'),
+            "name": self.name,
+            "value": self.value,
+            "tags": self.tags
+        }
+
+
+class CounterMessage:
+    timestamp: datetime
+    metric_name: str
+    value: float
+    tags: Dict[str, str]
+
+    def __init__(self, timestamp: datetime, name: str, value: float, tags: Dict[str, str]):
+        self.timestamp = timestamp
+        self.name = name
+        self.value = value
+        self.tags = tags
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            "timestamp": self.timestamp.isoformat(timespec='microseconds').replace('+00:00', 'Z'),
+            "metric_name": self.name,
+            "value": self.value,
+            "tags": self.tags
+        }
+
+
+class GaugeMessage:
+    timestamp: datetime
+    metric_name: str
+    value: float
+    tags: Dict[str, str]
+
+    def __init__(self, timestamp: datetime, name: str, value: float, tags: Dict[str, str]):
+        self.timestamp = timestamp
+        self.name = name
+        self.value = value
+        self.tags = tags
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            "timestamp": self.timestamp.isoformat(timespec='microseconds').replace('+00:00', 'Z'),
+            "metric_name": self.name,
+            "value": self.value,
+            "tags": self.tags
+        }
+
+
+class HistogramMessage:
+    timestamp: datetime
+    metric_name: str
+    values: List[float]
+    tags: Dict[str, str]
+
+    def __init__(self, timestamp: datetime, name: str, values: List[float], tags: Dict[str, str]):
+        self.timestamp = timestamp
+        self.name = name
+        self.values = values
+        self.tags = tags
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            "timestamp": self.timestamp.isoformat(timespec='microseconds').replace('+00:00', 'Z'),
+            "metric_name": self.name,
+            "values": self.values,
+            "tags": self.tags
+        }
+
+
+class AggregatedMetrics:
+    counter_metrics: List[CounterMessage]
+    gauge_metrics: List[GaugeMessage]
+    histogram_metrics: List[HistogramMessage]
+
+    def __init__(self):
+        self.counter_metrics = []
+        self.gauge_metrics = []
+        self.histogram_metrics = []
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            "counter_metrics": [metric.to_json() for metric in self.counter_metrics],
+            "gauge_metrics": [metric.to_json() for metric in self.gauge_metrics],
+            "histogram_metrics": [metric.to_json() for metric in self.histogram_metrics]
+        }
+
+
+class CapturedCounter:
+    name: str
+    tags: Dict[str, str]
+    value: float
+
+    def __init__(self, name: str, tags: Dict[str, str], value: float):
+        self.name = name
+        self.tags = tags
+        self.value = value
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "tags": self.tags,
+            "value": self.value
+        }
+
+
+class CapturedGauge:
+    name: str
+    tags: Dict[str, str]
+    value: float
+
+    def __init__(self, name: str, tags: Dict[str, str], value: float):
+        self.name = name
+        self.tags = tags
+        self.value = value
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "tags": self.tags,
+            "value": self.value
+        }
+
+
+class CapturedHistogram:
+    name: str
+    tags: Dict[str, str]
+    values: List[float]
+
+    def __init__(self, name: str, tags: Dict[str, str], values: List[float]):
+        self.name = name
+        self.tags = tags
+        self.values = values
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "tags": self.tags,
+            "values": self.values
+        }
+
+
+class CapturedMetrics:
+    counters: Dict[str, CapturedCounter]
+    gauges: Dict[str, CapturedGauge]
+    histograms: Dict[str, CapturedHistogram]
+
+    def __init__(self):
+        self.counters = {}
+        self.gauges = {}
+        self.histograms = {}
