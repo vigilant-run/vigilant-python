@@ -5,7 +5,7 @@ from vigilant.utils import get_current_timestamp
 from vigilant.types import Metric
 
 
-def counter(name: str, value: float, tags: Dict[str, str] = {}):
+def metric_counter(name: str, value: float, tags: Dict[str, str] = {}):
     """
     Creates a counter metric.
 
@@ -22,7 +22,7 @@ def counter(name: str, value: float, tags: Dict[str, str] = {}):
     global_instance.send_counter(metric)
 
 
-def gauge(name: str, value: float, tags: Dict[str, str] = {}):
+def metric_gauge(name: str, value: float, tags: Dict[str, str] = {}):
     """
     Creates a gauge metric.
 
@@ -39,7 +39,7 @@ def gauge(name: str, value: float, tags: Dict[str, str] = {}):
     global_instance.send_gauge(metric)
 
 
-def histogram(name: str, value: float, tags: Dict[str, str] = {}):
+def metric_histogram(name: str, value: float, tags: Dict[str, str] = {}):
     """
     Creates a histogram metric.
 
