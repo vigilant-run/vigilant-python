@@ -96,8 +96,7 @@ class MetricSender:
             get_timeout = remaining_time_in_interval if not current_metrics else 0.01
 
             try:
-                item = self._thread_safe_queue.get(
-                    block=True, timeout=get_timeout)
+                item = self._thread_safe_queue.get(block=True, timeout=get_timeout)
 
                 if item is None:
                     break
@@ -180,11 +179,8 @@ class MetricSender:
                     f"HTTP error without response: {e}"
                 ) from e
         except requests.exceptions.Timeout:
-            raise BatcherInternalServerError(
-                f"HTTP request timed out after 10 seconds")
+            raise BatcherInternalServerError(f"HTTP request timed out after 10 seconds")
         except requests.exceptions.ConnectionError as e:
-            raise BatcherInternalServerError(
-                f"HTTP connection failed: {e}") from e
+            raise BatcherInternalServerError(f"HTTP connection failed: {e}") from e
         except requests.exceptions.RequestException as e:
-            raise BatcherInternalServerError(
-                f"HTTP request failed: {e}") from e
+            raise BatcherInternalServerError(f"HTTP request failed: {e}") from e

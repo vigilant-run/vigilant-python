@@ -33,8 +33,7 @@ def init_vigilant(user_config: Optional[VigilantUserConfig] = None):
                 _add_shutdown_listeners()
                 _shutdown_registered = True
         except Exception as e:
-            raise UnexpectedFailureError(
-                f"Failed to initialize Vigilant: {e}") from e
+            raise UnexpectedFailureError(f"Failed to initialize Vigilant: {e}") from e
         finally:
             _global_instance = temp_instance
 

@@ -22,7 +22,9 @@ def metric_counter(name: str, value: float, tags: Dict[str, str] = {}):
     global_instance.send_counter(metric)
 
 
-def metric_gauge(name: str, value: float, mode: GaugeMode = GaugeMode.SET, tags: Dict[str, str] = {}):
+def metric_gauge(
+    name: str, value: float, mode: GaugeMode = GaugeMode.SET, tags: Dict[str, str] = {}
+):
     """
     Creates a gauge metric.
 

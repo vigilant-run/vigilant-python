@@ -65,8 +65,7 @@ class MetricCollector:
         self.worker_threads.append(processor)
         processor.start()
 
-        self.ticker_thread = threading.Thread(
-            target=self._run_ticker, daemon=True)
+        self.ticker_thread = threading.Thread(target=self._run_ticker, daemon=True)
         self.ticker_thread.start()
 
     def stop(self):
@@ -132,8 +131,7 @@ class MetricCollector:
                 next_start = current_interval_start + self.aggregate_interval
                 first_time = next_start + timedelta(milliseconds=50)
 
-                wait_duration_seconds = (
-                    first_time - now).total_seconds()
+                wait_duration_seconds = (first_time - now).total_seconds()
                 wait_duration_seconds = max(0, wait_duration_seconds)
 
                 self.ticker_timer = threading.Timer(
