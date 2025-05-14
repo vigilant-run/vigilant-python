@@ -1,3 +1,4 @@
+from typing import Dict
 from vigilant.log_batcher import LogBatcher
 from vigilant.types import Log, CounterEvent, GaugeEvent, HistogramEvent
 from vigilant.passthrough import Passthrough
@@ -29,6 +30,7 @@ class VigilantConfig:
         passthrough: bool,
         autocapture: bool,
         noop: bool,
+        attributes: Dict[str, str] = {},
     ):
         self.name = name
         self.token = token
@@ -37,6 +39,7 @@ class VigilantConfig:
         self.passthrough = passthrough
         self.autocapture = autocapture
         self.noop = noop
+        self.attributes = attributes
 
 
 class Vigilant:
@@ -64,7 +67,10 @@ class Vigilant:
         self.metric_collector = create_metric_collector(config)
         self.passthrough = Passthrough()
         self.log_router = LogRouter(self.send_log)
-        self.attribute_provider = AttributeProvider(config.name)
+
+        attributes = {"service": config.name}
+        attributes.update(config.attributes)
+        self.attribute_provider = AttributeProvider(attributes)
 
     def start(self):
         if self.noop:

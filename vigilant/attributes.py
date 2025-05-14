@@ -62,14 +62,14 @@ class AttributeProvider:
 
     name: str
 
-    def __init__(self, name: str):
-        self.name = name
+    def __init__(self, base: Dict[str, str]):
+        self.base = base
 
     def update_attributes(self, attributes: Dict[str, str]):
         current_attributes = get_attributes()
         merged_attributes = attributes.copy()
         merged_attributes.update(current_attributes)
-        merged_attributes["service"] = self.name
+        merged_attributes.update(self.base)
         filtered_attributes = {
             k: v
             for k, v in merged_attributes.items()

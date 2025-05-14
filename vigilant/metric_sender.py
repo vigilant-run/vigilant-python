@@ -162,8 +162,6 @@ class MetricSender:
             ],
         }
 
-        print(f"Sending metrics: {payload}")
-
         try:
             response = session.post(self.endpoint, json=payload, timeout=10)
             response.raise_for_status()

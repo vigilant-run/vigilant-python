@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Dict
 
 
 class VigilantUserConfig:
@@ -25,6 +25,7 @@ class VigilantUserConfig:
         passthrough: Optional[bool] = None,
         autocapture: Optional[bool] = None,
         noop: Optional[bool] = None,
+        attributes: Optional[Dict[str, str]] = None,
     ):
         self.name = name
         self.token = token
@@ -33,3 +34,4 @@ class VigilantUserConfig:
         self.passthrough = passthrough
         self.autocapture = autocapture
         self.noop = noop
+        self.attributes = attributes
