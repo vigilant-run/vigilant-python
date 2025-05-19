@@ -44,6 +44,29 @@ class Log:
         }
 
 
+class Metric:
+    timestamp: datetime
+    name: str
+    value: float
+    attributes: Dict[str, str]
+
+    def __init__(self, name: str, value: float, attributes: Dict[str, str]):
+        self.timestamp = get_current_timestamp()
+        self.name = name
+        self.value = value
+        self.attributes = attributes
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            "timestamp": self.timestamp.isoformat(timespec="microseconds").replace(
+                "+00:00", "Z"
+            ),
+            "name": self.name,
+            "value": self.value,
+            "attributes": self.attributes,
+        }
+
+
 class CounterEvent:
     name: str
     value: float

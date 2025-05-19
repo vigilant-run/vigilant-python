@@ -3,7 +3,7 @@ import queue
 import time
 import requests
 from typing import List, Optional, Dict, Any
-from vigilant.types import Log
+from vigilant.types import Metric
 from vigilant.message import (
     VigilantError,
     BatcherInvalidTokenError,
@@ -11,9 +11,9 @@ from vigilant.message import (
 )
 
 
-class LogBatcher:
+class MetricBatcher:
     """
-    A class used to batch and send log batches synchronously in a background thread
+    A class used to batch and send metric batches synchronously in a background thread
     using the requests library.
     """
 
@@ -30,14 +30,14 @@ class LogBatcher:
         self.max_batch_size: int = max_batch_size
 
         queue_capacity = max(10_000, max_batch_size * 10)
-        self._thread_safe_queue: queue.Queue[Optional[Log]] = queue.Queue(
+        self._thread_safe_queue: queue.Queue[Optional[Metric]] = queue.Queue(
             maxsize=queue_capacity
         )
         self._background_thread: Optional[threading.Thread] = None
         self._stop_event: threading.Event = threading.Event()
         self._session: Optional[requests.Session] = None
 
-    def add(self, item: Log) -> None:
+    def add(self, item: Metric) -> None:
         """Adds an item to the thread-safe queue for processing by the background thread."""
         if self._stop_event.is_set() or self._background_thread is None:
             return
@@ -88,7 +88,7 @@ class LogBatcher:
 
     def _run_background_loop(self) -> None:
         """Target function for the background thread. Runs the batching loop."""
-        current_batch: List[Log] = []
+        current_batch: List[Metric] = []
         last_send_time = time.monotonic()
 
         while not self._stop_event.is_set():
@@ -140,7 +140,7 @@ class LogBatcher:
         if current_batch:
             self._flush_batch(current_batch)
 
-    def _flush_batch(self, batch: List[Log]) -> None:
+    def _flush_batch(self, batch: List[Metric]) -> None:
         """Flushes the provided batch using the requests session."""
         if not batch:
             return
@@ -156,11 +156,11 @@ class LogBatcher:
                 f"Unexpected error sending Vigilant batch: {e}"
             ) from e
 
-    def _send_batch(self, batch: List[Log], session: requests.Session) -> None:
+    def _send_batch(self, batch: List[Metric], session: requests.Session) -> None:
         """Sends a batch of messages using the provided requests session."""
         payload: Dict[str, Any] = {
             "token": self.token,
-            "logs": [log.to_json() for log in batch],
+            "metrics": [metric.to_json() for metric in batch],
         }
 
         try:

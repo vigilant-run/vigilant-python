@@ -1,6 +1,7 @@
 from typing import Dict
 from vigilant.log_batcher import LogBatcher
-from vigilant.types import Log, CounterEvent, GaugeEvent, HistogramEvent
+from vigilant.metric_batcher import MetricBatcher
+from vigilant.types import Log, CounterEvent, GaugeEvent, HistogramEvent, Metric
 from vigilant.passthrough import Passthrough
 from vigilant.router import LogRouter
 from vigilant.attributes import AttributeProvider
@@ -64,6 +65,7 @@ class Vigilant:
         self.noop = config.noop
 
         self.log_batcher = create_log_batcher(config)
+        self.metric_batcher = create_metric_batcher(config)
         self.metric_collector = create_metric_collector(config)
         self.passthrough = Passthrough()
         self.log_router = LogRouter(self.send_log)
@@ -77,6 +79,7 @@ class Vigilant:
             return
 
         self.log_batcher.start()
+        self.metric_batcher.start()
         self.metric_collector.start()
 
         if self.autocapture:
@@ -93,6 +96,7 @@ class Vigilant:
             self.log_router.disable()
 
         self.metric_collector.stop()
+        self.metric_batcher.stop()
         self.log_batcher.stop()
 
     def send_log(self, log: Log):
@@ -110,6 +114,17 @@ class Vigilant:
             return
 
         self.log_batcher.add(log)
+
+    def send_metric(self, metric: Metric):
+        """
+        Send a metric to Vigilant via the batcher.
+        If passthrough, the metric will be passed through to stdout or stderr.
+        If noop, the metric will not be sent to Vigilant.
+        """
+        if self.noop:
+            return
+
+        self.metric_batcher.add(metric)
 
     def send_counter(self, metric: CounterEvent):
         """
@@ -147,6 +162,15 @@ class Vigilant:
 
 def create_log_batcher(config: VigilantConfig) -> LogBatcher:
     return LogBatcher(
+        endpoint=create_formatted_endpoint(config.endpoint, config.insecure),
+        token=config.token,
+        batch_interval_seconds=0.1,
+        max_batch_size=1000,
+    )
+
+
+def create_metric_batcher(config: VigilantConfig) -> MetricBatcher:
+    return MetricBatcher(
         endpoint=create_formatted_endpoint(config.endpoint, config.insecure),
         token=config.token,
         batch_interval_seconds=0.1,
