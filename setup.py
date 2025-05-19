@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="vigilant-py",
-    version="3.0.2",
+    version="3.1.0",
     author="Vigilant Team",
     author_email="support@vigilant.run",
     url="https://vigilant.run",

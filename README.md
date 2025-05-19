@@ -67,24 +67,12 @@ def function():
 You can learn more about metrics in Vigilant in the [docs](https://docs.vigilant.run/metrics).
 
 ```python
-from vigilant import metric_counter, metric_gauge, metric_histogram, GaugeMode
+from vigilant import metric_event
 
 def function():
-  # Create a counter metric
-  metric_counter("user_login_count", 1)
+  # Create a metric event
+  metric_event("user_login_count", 1)
 
-  # Create a counter metric with a tag
-  metric_counter("user_login_count", 1, {"route": "/"})
-
-  # Create a gauge metric
-  metric_gauge("active_users", 1, GaugeMode.SET)
-
-  # Create a gauge metric with a tag
-  metric_gauge("active_users", 1, GaugeMode.SET, {"route": "/"})
-
-  # Create a histogram metric
-  metric_histogram("request_duration", 123.4)
-
-  # Create a histogram metric with a tag
-  metric_histogram("request_duration", 123.4, {"route": "/"})
+  # Create a metric event with a tag
+  metric_event("user_login_count", 1, {"route": "/"})
 ```
